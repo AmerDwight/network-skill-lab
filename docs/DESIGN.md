@@ -1,4 +1,4 @@
-# aiwaxis_skill_quiz 設計文件
+# network-skill-lab 設計文件
 
 > 狀態：v1，2026-09-18 已確認。§10 四項判斷皆採納。
 > 日期：2026-09-18
@@ -25,6 +25,7 @@
 | D12 | UI 與內容雙語（zh-TW / en） |
 | D13 | 預期同時一人使用，規格不為並行最佳化，但不封死 |
 | D14 | 面試功能（時限、即時觀看、回放 UI、成績頁）延後；只有錄製先做進資料模型 |
+| D15 | 命名：repo `network-skill-lab`（2026-09-18 由 aiwaxis_skill_quiz 改名）、Go module `github.com/AmerDwight/network-skill-lab`、binary `nsl`、image `nsl/node`、環境變數前綴 `NSL_` |
 
 ## 2. 系統架構
 
@@ -42,7 +43,7 @@
                │ REST /api/*              │ WS /ws/attempts/{id}/term/{node}/{tab}
                │                          │ WS /ws/attempts/{id}/events
 ┌──────────────▼──────────────────────────▼──────────────────────────────┐
-│  aiwaxis (single Go binary, mode = all-in-one)                         │
+│  nsl (single Go binary, mode = all-in-one)                             │
 │                                                                        │
 │  Control Plane                          Runner (in-process, v1)        │
 │  ├─ auth        本地帳密, admin/user     ├─ provider/docker             │
@@ -57,7 +58,7 @@
 ┌─────────────────────────────────▼──────────────────────────────────────┐
 │  一次練習 = 一個 sandbox                                                │
 │    docker network per link（獨立 bridge，固定 subnet）                  │
-│    node container × N：aiwaxis/node image，privileged，systemd PID 1    │
+│    node container × N：nsl/node image，privileged，systemd PID 1        │
 │    k3s 節點 = 同一 image 內啟動 k3s service                             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -144,10 +145,10 @@ content/
     network-basics.yaml
     k3s-troubleshooting.yaml
 images/
-  node/Dockerfile             # aiwaxis/node 基底 image
+  node/Dockerfile             # nsl/node 基底 image
 ```
 
-全部是純文字、進 git。啟動時載入並驗證；提供 `aiwaxis content lint` 指令給作者。
+全部是純文字、進 git。啟動時載入並驗證；提供 `nsl content lint` 指令給作者。
 
 ### 3.5 lab.yaml 規格
 
@@ -206,7 +207,7 @@ tutorial:                     # 只在 mode=tutorial 使用，每步對應一個
 ```
 
 **腳本契約：**
-- 所有腳本在指定 node 內以 root 執行，參數以環境變數注入（`AIW_SUBNET`, `AIW_IP_A`, ...）。
+- 所有腳本在指定 node 內以 root 執行，參數以環境變數注入（`NSL_SUBNET`, `NSL_IP_A`, ...）。
 - `setup.sh`：把環境弄壞。冪等不強求，但失敗要 exit 非 0。
 - `precheck.sh`：驗證產生出的環境符合題意（例如 ARP 題兩節點真的同網段、故障真的存在）。exit 0 通過。
 - `checks/*.sh`：exit 0 = 通過。禁止有副作用。10 秒逾時。
@@ -215,10 +216,10 @@ tutorial:                     # 只在 mode=tutorial 使用，每步對應一個
 
 ```yaml
 nodes:
-  web01: { image: aiwaxis/node, role: ubuntu }
-  db01:  { image: aiwaxis/node, role: ubuntu }
-  # k3s 範例： k3s01: { image: aiwaxis/node, role: k3s-server }
-  #           k3s02: { image: aiwaxis/node, role: k3s-agent, server: k3s01 }
+  web01: { image: nsl/node, role: ubuntu }
+  db01:  { image: nsl/node, role: ubuntu }
+  # k3s 範例： k3s01: { image: nsl/node, role: k3s-server }
+  #           k3s02: { image: nsl/node, role: k3s-agent, server: k3s01 }
 links:
   - endpoints: ["web01:eth1", "db01:eth1"]
     subnet: "{{subnet}}"
@@ -260,7 +261,7 @@ steps:
 
 ## 4. 沙箱節點 image
 
-`aiwaxis/node`：Ubuntu 24.04 + systemd 當 PID 1，預裝以下 66 個套件（使用者勾選定案）。
+`nsl/node`：Ubuntu 24.04 + systemd 當 PID 1，預裝以下 66 個套件（使用者勾選定案）。
 
 - net-core：iproute2, net-tools, ethtool, iputils-ping, iputils-arping, iputils-tracepath, traceroute, mtr-tiny, netcat-openbsd, socat, iperf3, telnet, nmap, arp-scan
 - dns：bind9-dnsutils, systemd-resolved
@@ -274,7 +275,7 @@ steps:
 - edit：vim, nano, less, jq, yq, tmux, tree, git, bash-completion, man-db, file, unzip, sudo, cron
 
 Image 內建：
-- `/etc/profile.d/aiwaxis-history.sh`：`PROMPT_COMMAND` hook，把每條指令（時間、cwd、指令、exit code）寫到 `/var/log/aiwaxis/commands.jsonl`，recorder 定期拉取。
+- `/etc/profile.d/nsl-history.sh`：`PROMPT_COMMAND` hook，把每條指令（時間、cwd、指令、exit code）寫到 `/var/log/nsl/commands.jsonl`，recorder 定期拉取。
 - 預設 `network-manager` 停用、`systemd-networkd` + `netplan` 啟用；lab 可在 topology 的 role 選 `ubuntu-nm` 改用 NetworkManager。
 - k3s binary 預裝但 service 不啟用；`role: k3s-server / k3s-agent` 的節點由 bootstrap 啟動。
 - 預估大小 1.5 到 2 GB，k3s 相關 image 預先 `ctr images import` 進去避免練習時拉網路。
@@ -328,7 +329,7 @@ Phase 0 只做驗證腳本，不寫正式程式碼，結果回寫本文件。
 ## 8. 專案結構（Go + React）
 
 ```
-cmd/aiwaxis/            main：all-in-one 模式
+cmd/nsl/                main：all-in-one 模式
 internal/
   auth/  content/  attempt/  checker/  recorder/  store/
   runner/               Runner interface + in-process 實作
