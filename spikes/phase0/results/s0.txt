@@ -1,0 +1,52 @@
+
+== host
+kernel  6.18.33.2-microsoft-standard-WSL2
+docker  ver=29.8.0 cgroupDriver=systemd cgroupVer=2 storage=overlayfs ncpu=4  memMB=5926
+PASS  cgroup v2 unified on host
+PASS  docker cgroup v2
+
+== kernel config (/proc/config.gz)
+PASS  config.gz readable
+PASS  CONFIG_VXLAN=y
+PASS  CONFIG_NF_TABLES=y
+PASS  CONFIG_NF_CONNTRACK=y
+PASS  CONFIG_NF_NAT=y
+PASS  CONFIG_BRIDGE=m
+PASS  CONFIG_BRIDGE_NETFILTER=m
+PASS  CONFIG_VLAN_8021Q=m
+PASS  CONFIG_DUMMY=m
+PASS  CONFIG_VETH=y
+PASS  CONFIG_MACVLAN=m
+PASS  CONFIG_IP_NF_IPTABLES=m
+PASS  CONFIG_IP_NF_NAT=m
+PASS  CONFIG_IP_NF_FILTER=m
+PASS  CONFIG_NETFILTER_XT_MATCH_CONNTRACK=m
+PASS  CONFIG_NETFILTER_XT_MATCH_COMMENT=m
+PASS  CONFIG_NETFILTER_XT_MATCH_MULTIPORT=m
+PASS  CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=m
+PASS  CONFIG_IP_SET=m
+PASS  CONFIG_OVERLAY_FS=y
+PASS  CONFIG_CGROUP_BPF=y
+PASS  CONFIG_BPF_SYSCALL=y
+
+== privileged container: functional probes
+PASS  vxlan link create
+PASS  dummy link create
+PASS  bridge create
+PASS  veth pair create
+PASS  802.1q vlan create
+PASS  macvlan create
+PASS  nft add table
+PASS  iptables nat table
+PASS  conntrack sysctl
+PASS  conntrack -L
+PASS  /dev/kmsg readable
+PASS  /sys/fs/cgroup is cgroup2
+PASS  /sys/fs/cgroup writable
+PASS  sysctl net.ipv4.ip_forward writable
+PASS  bridge netfilter sysctl present
+
+== modules now loaded on host
+8021q br_netfilter bridge dummy ip_tables macvlan nf_conntrack_netlink nft_compat xt_MASQUERADE xt_addrtype xt_connmark xt_conntrack xt_mark xt_nat xt_set 
+
+RESULT s0 PASS (39 checks)
