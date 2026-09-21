@@ -1,6 +1,6 @@
 # network-skill-lab 設計文件
 
-> 狀態：v1，2026-09-18 已確認。§10 四項判斷皆採納。同日補 §3.9 擴充點、§9 phase 類型與「架構優先於內容」原則。
+> 狀態：v1，2026-09-18 已確認。§10 四項判斷皆採納。同日補 §3.9 擴充點、§9 phase 類型與「架構優先於內容」原則。2026-09-21 Phase 0 完成，§3.6、§4、§7 回寫實測結果。
 > 日期：2026-09-18
 
 ## 0. 一句話
@@ -226,7 +226,12 @@ links:
     addresses: { web01: "{{ip_a}}/24", db01: "{{ip_b}}/24" }
 ```
 
-v1 Docker provider 的實作：每條 link = 一個 `--internal` bridge network；容器接上後由 setup 前的 bootstrap 把 Docker 配的位址交給 netplan / systemd-networkd 接管（見 §7 風險 R1）。未來 containerlab provider 可直接讀這份格式。
+v1 Docker provider 的實作（Phase 0 實證）：
+- 每條 link = 一個 `--internal` bridge network，以 `--ip` 指定位址；另有一個 mgmt network 給 eth0 走 NAT。
+- 建容器時只接 mgmt，啟動後依 topology 宣告順序逐一 `docker network connect`，eth1、eth2 的順序即宣告順序。
+- 節點只建立與銷毀，不 restart：restart 後 Docker 重接網路的順序不保證，且會蓋回 resolv.conf。若日後需要，改用 netplan `match: {macaddress}` + `set-name` 綁 MAC。
+- bootstrap 把 Docker 配的位址寫進 netplan 交給 networkd（方案 A），之後題目可自由 `netplan apply`、改 IP，Docker 不會干預。
+未來 containerlab provider 可直接讀這份格式。
 
 ### 3.7 track.yaml
 
@@ -293,11 +298,26 @@ steps:
 - sys：procps, psmisc, lsof, strace, htop, sysstat, util-linux
 - edit：vim, nano, less, jq, yq, tmux, tree, git, bash-completion, man-db, file, unzip, sudo, cron
 
-Image 內建：
-- `/etc/profile.d/nsl-history.sh`：`PROMPT_COMMAND` hook，把每條指令（時間、cwd、指令、exit code）寫到 `/var/log/nsl/commands.jsonl`，recorder 定期拉取。
-- 預設 `network-manager` 停用、`systemd-networkd` + `netplan` 啟用；lab 可在 topology 的 role 選 `ubuntu-nm` 改用 NetworkManager。
-- k3s binary 預裝但 service 不啟用；`role: k3s-server / k3s-agent` 的節點由 bootstrap 啟動。
-- 預估大小 1.5 到 2 GB，k3s 相關 image 預先 `ctr images import` 進去避免練習時拉網路。
+Image 內建（`images/node/`，Phase 0 定稿）：
+- `/etc/profile.d/nsl-history.sh`：`PROMPT_COMMAND` hook，把每條指令（時間、使用者、cwd、指令、exit code）以 JSON 寫到 `/var/log/nsl/commands.jsonl`，recorder 定期拉取。只涵蓋互動 shell；可信來源是 pty 錄影。
+- 預設 `network-manager` 停用、`systemd-networkd` + `netplan` 啟用；lab 可在 topology 的 role 選 `ubuntu-nm` 改用 NetworkManager（eth0 對 NM 為 unmanaged）。
+- udev 啟用（netplan 依賴）。不宣告 `VOLUME`。
+- k3s binary 預裝、`k3s.service` / `k3s-agent.service` 存在但不啟用；airgap images 在 `/usr/share/nsl/`，data 目錄於 build 預解壓。k3s 角色由 provider 額外掛 volume 到 `/var/lib/rancher/k3s/agent/containerd`（containerd 的 overlayfs snapshotter 不能疊在 overlay 上）。
+- 使用者 `nsl`（sudo NOPASSWD）與 root。
+- 實測 2.0 GB；systemd 開機約 1 秒。
+
+**Bootstrap 契約**（`/usr/local/sbin/nsl-bootstrap`，容器內以 root 執行一次，由 runner 在 systemd 就緒後 exec）：
+
+| 環境變數 | 意義 |
+|---|---|
+| `NSL_NODE` | 節點名稱，設為 hostname |
+| `NSL_ROLE` | `ubuntu` / `ubuntu-nm` / `k3s-server` / `k3s-agent` |
+| `NSL_IFACES` | 依序的介面與位址，如 `eth1=10.0.5.10/24,eth2=192.168.1.1/24` |
+| `NSL_DNS` | mgmt DNS，預設取 Docker 給的 nameserver |
+| `NSL_K3S_TOKEN` | k3s 角色用 |
+| `NSL_K3S_SERVER` | agent 用：server 的 link 位址 |
+
+動作：umount Docker 的 resolv.conf / hosts / hostname → resolved 接管 → 寫 netplan 並 apply → 依 role 以 `--no-block` 起 k3s（runner 以 kubectl 輪詢 Node Ready，不等 unit 的 READY 訊號）。
 
 ## 5. 資料模型（SQLite）
 
@@ -332,18 +352,18 @@ recordings       attempt_id, node, tab_id, path(asciicast v2 file), started_at, 
 
 使用者可隨時「放棄」→ abandoned → Destroy。同一 user 只能有一個非終態的 attempt。
 
-## 7. 已知風險與 Phase 0 驗證項目
+## 7. 已知風險與 Phase 0 驗證結果
 
-| # | 風險 | 驗證方式 |
+Phase 0 於 2026-09-21 完成，細節與數字見 `docs/PHASE0-RESULTS.md`。
+
+| # | 風險 | 結果 |
 |---|---|---|
-| R1 | Docker 配給容器的 IP 與 netplan / systemd-networkd 接管衝突 | 起兩個 systemd 容器，bootstrap 把 eth1 交給 networkd，確認 `netplan apply` 行為正常、Docker 不會搶回 |
-| R2 | systemd 在 privileged 容器內的穩定性（journald、resolved、cgroup） | 同上，確認 `systemctl`、`journalctl -u`、`resolvectl status` 可用 |
-| R3 | k3s server + agent 兩節點在容器內組叢集、flannel VXLAN 跨容器通 | 兩容器起 k3s，跨節點 Pod 互 ping |
-| R4 | 練習中把介面全關會不會影響 docker exec / checker | 關掉所有介面後 exec 仍可用（理論上可，實測確認） |
-| R5 | image 大小與啟動時間 | 量測：目標冷啟動 < 30 秒（含 k3s） |
-| R6 | 安全：privileged 容器 = host root。v1 只在信任網路使用；正式上線時沙箱主機必須與控制面分離（v2 遠端 runner） | 設計面已隔離，記錄為上線前置條件 |
-
-Phase 0 只做驗證腳本，不寫正式程式碼，結果回寫本文件。
+| R1 | Docker 配給容器的 IP 與 netplan / systemd-networkd 接管衝突 | **通過，採方案 A**。netplan 改 IP 生效、Docker 不搶回，10 分鐘零漂移。條件：節點不 `docker restart` |
+| R2 | systemd 在 privileged 容器內的穩定性 | **通過**。零 failed unit。udev 必須啟用（netplan 依賴）；resolv.conf / hosts / hostname 由 bootstrap umount 後接管 |
+| R3 | k3s server + agent 組叢集、flannel VXLAN 跨容器通 | **通過**。完全離線、跨節點 Pod 互 ping |
+| R4 | 介面全關是否影響 docker exec / checker | **通過**。exec 63 ms |
+| R5 | image 大小與啟動時間 | **通過**。image 2.0 GB；Ubuntu 雙節點 6.3 s，k3s 雙節點 Ready 16 到 21 s |
+| R6 | 安全：privileged 容器 = host root | 未變。v1 只在信任網路使用；上線前提是沙箱主機與控制面分離（v2 遠端 runner） |
 
 ## 8. 專案結構（Go + React）
 

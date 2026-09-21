@@ -38,7 +38,8 @@ RUN set -eux; \
     curl -fsSL "https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_amd64.tar.gz" | tar -xz -C /usr/local/bin k9s; \
     curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin kustomize; \
     curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"; \
-    chmod 0755 /usr/local/bin/yq
+    chmod 0755 /usr/local/bin/yq; \
+    k3s ctr --help >/dev/null 2>&1
 
 COPY rootfs/ /
 

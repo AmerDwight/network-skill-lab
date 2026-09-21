@@ -68,14 +68,14 @@ start_k3s() {
       } > /etc/rancher/k3s/config.yaml
       ln -sf /etc/rancher/k3s/k3s.yaml /root/.kube-config 2>/dev/null || true
       printf 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\n' > /etc/profile.d/nsl-kubeconfig.sh
-      systemctl enable --now k3s
+      systemctl enable --now --no-block k3s
       ;;
     k3s-agent)
       {
         printf 'server: https://%s:6443\ntoken: %s\n' "$NSL_K3S_SERVER" "$NSL_K3S_TOKEN"
         [ -n "$ip" ] && printf 'node-ip: %s\nflannel-iface: eth1\n' "$ip"
       } > /etc/rancher/k3s/config.yaml
-      systemctl enable --now k3s-agent
+      systemctl enable --now --no-block k3s-agent
       ;;
   esac
 }

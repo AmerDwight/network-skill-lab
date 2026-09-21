@@ -73,7 +73,7 @@ check "peer still reachable" x $A ping -c 1 -W 1 -I eth1 10.0.5.20
 section "R2 systemd services in container"
 check_out "resolv.conf is resolved symlink" x $A sh -c "readlink /etc/resolv.conf"
 check "resolvectl status ok" x $A resolvectl status
-check_out "resolved global DNS" x $A sh -c "resolvectl status | grep -A1 'Global' | grep -o 'DNS Servers: .*'"
+check_out "resolved global DNS" x $A sh -c "resolvectl status | grep -A4 '^Global' | grep -o 'DNS Servers: .*'"
 check "dns resolves via resolved (mgmt)" x $A sh -c "resolvectl query deb.debian.org || dig +short deb.debian.org | grep -q ."
 check "journalctl -u networkd has entries" x $A sh -c "journalctl -u systemd-networkd --no-pager | grep -q ."
 check "hostname is web01" x $A sh -c "test \"\$(hostname)\" = web01 && grep -q web01 /etc/hosts"

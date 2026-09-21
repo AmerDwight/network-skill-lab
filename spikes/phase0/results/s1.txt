@@ -1,0 +1,97 @@
+
+== build
+MEASURE build_seconds = 1
+MEASURE image_size = 2014 MB
+
+== boot
+MEASURE boot_seconds = 1.24
+systemd state: running
+PASS  systemd reached running or degraded
+failed units: none
+PASS  no failed units
+PASS  unit active: systemd-networkd
+PASS  unit active: systemd-resolved
+PASS  unit active: ssh
+PASS  unit active: rsyslog
+PASS  unit active: cron
+PASS  unit active: chrony
+PASS  unit active: dbus
+PASS  NetworkManager inactive
+PASS  k3s installed but inactive
+PASS  journalctl works: dmesg.service: Deactivated successfully.
+PASS  resolvectl works: Global
+
+== tools in PATH
+PASS  bin: ip
+PASS  bin: ifconfig
+PASS  bin: ethtool
+PASS  bin: ping
+PASS  bin: arping
+PASS  bin: tracepath
+PASS  bin: traceroute
+PASS  bin: mtr
+PASS  bin: nc
+PASS  bin: socat
+PASS  bin: iperf3
+PASS  bin: telnet
+PASS  bin: nmap
+PASS  bin: arp-scan
+PASS  bin: dig
+PASS  bin: nslookup
+PASS  bin: resolvectl
+PASS  bin: tcpdump
+PASS  bin: tshark
+PASS  bin: iftop
+PASS  bin: conntrack
+PASS  bin: iptables
+PASS  bin: nft
+PASS  bin: ufw
+PASS  bin: netplan
+PASS  bin: networkctl
+PASS  bin: nmcli
+PASS  bin: dhclient
+PASS  bin: sshd
+PASS  bin: chronyc
+PASS  bin: nginx
+PASS  bin: rsyslogd
+PASS  bin: snmpwalk
+PASS  bin: snmpd
+PASS  bin: lldpd
+PASS  bin: snmptrapd
+PASS  bin: curl
+PASS  bin: wget
+PASS  bin: openssl
+PASS  bin: rsync
+PASS  bin: ps
+PASS  bin: killall
+PASS  bin: lsof
+PASS  bin: strace
+PASS  bin: htop
+PASS  bin: sar
+PASS  bin: vim
+PASS  bin: nano
+PASS  bin: less
+PASS  bin: jq
+PASS  bin: yq
+PASS  bin: tmux
+PASS  bin: tree
+PASS  bin: git
+PASS  bin: man
+PASS  bin: file
+PASS  bin: unzip
+PASS  bin: sudo
+PASS  bin: crontab
+PASS  bin: k3s
+PASS  bin: kubectl
+PASS  bin: crictl
+PASS  bin: ctr
+PASS  bin: helm
+PASS  bin: k9s
+PASS  bin: kustomize
+PASS  k3s airgap tarball present
+PASS  k3s version: k3s version v1.36.4+k3s1 (4dedb15b)
+go version go1.26.7
+PASS  man page for ip present
+PASS  history hook installed
+
+RESULT s1 PASS (83 checks)
