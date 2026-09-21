@@ -54,5 +54,5 @@ finish() {
 
 cleanup_containers() {
   local names=("$@")
-  docker rm -f "${names[@]}" >/dev/null 2>&1 || true
+  docker rm -fv "${names[@]}" >/dev/null 2>&1 || true
 }
