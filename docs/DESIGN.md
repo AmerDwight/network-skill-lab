@@ -1,6 +1,6 @@
 # network-skill-lab 設計文件
 
-> 狀態：v1，2026-09-18 已確認。§10 四項判斷皆採納。
+> 狀態：v1，2026-09-18 已確認。§10 四項判斷皆採納。同日補 §3.9 擴充點、§9 phase 類型與「架構優先於內容」原則。
 > 日期：2026-09-18
 
 ## 0. 一句話
@@ -259,6 +259,25 @@ steps:
 
 主題樹只是分類與導覽用，不影響執行。
 
+### 3.9 擴充點（內容作者可碰的 API）
+
+以下是內容系統對外的契約。每一項都有版本（`lab.yaml` 的 `version`）、由 `nsl content lint` 驗證，變更要走向後相容或升版。
+
+| 擴充點 | 作者怎麼用 | 引擎承諾 |
+|---|---|---|
+| Doc | 放 markdown 到 `docs/<topic>/`，雙語檔名 | 渲染、依 topic 導覽、可被 lab 與 track 引用 |
+| Lab schema（§3.5） | 寫 `lab.yaml` | 載入、驗證、依 `modes` 提供對應模式 |
+| Topology（§3.6） | 宣告 nodes / links / role | 由 provider 建出來；同一份可跑 container 或 vm |
+| Node role | `ubuntu`、`ubuntu-nm`、`k3s-server`、`k3s-agent` | bootstrap 依 role 起對應服務；新 role 由引擎端新增 |
+| Params 產生器 | `cidr` / `ip_in` / `choice` / `int` / `const` | 依序求值、注入 `NSL_*` 環境變數與 `{{}}` 模板 |
+| Case | `cases/*.yaml` 覆寫 params，加權 | 加權隨機選 case |
+| 腳本契約 | `setup.sh`、`precheck.sh`、`checks/*.sh` | root 執行、環境變數注入、exit code 語意、逾時 |
+| Mode | `tutorial` / `guided` / `real` | 同一 lab 依 mode 決定揭露程度與結束條件 |
+| Track | 寫 `track.yaml` 串 doc 與 lab | 有序導覽、進度 |
+| Environment | `environment: container \| vm` | 交給對應 provider；缺 provider 時 lint 警告 |
+
+不在此清單內的行為（例如新的產生器、新的 role、新的 mode）屬引擎修改，走正式開發流程。
+
 ## 4. 沙箱節點 image
 
 `nsl/node`：Ubuntu 24.04 + systemd 當 PID 1，預裝以下 66 個套件（使用者勾選定案）。
@@ -344,14 +363,20 @@ docs/                   本文件與後續 ADR
 
 ## 9. Roadmap
 
-| Phase | 內容 | 完成定義 |
-|---|---|---|
-| 0 | 風險驗證（§7） | R1 到 R5 有實測結果 |
-| 1 | 核心：all-in-one binary、Docker provider、terminal 多分頁、timer、checker、SQLite、1 個示範 lab | 能從瀏覽器完整跑完一題 guided 模式 |
-| 2 | 內容系統：docs 面板、tracks、tutorial / real 模式、params 隨機化、precheck、`content lint` | 5 個 lab（net × 3、k3s × 2）+ 對應 guide |
-| 3 | 帳號 admin/user、歷史紀錄頁、錄製回放 | 多帳號可各自練習並回看 |
-| 4 | 遠端 runner、VM provider | 成員自架 runner 可接上 |
-| 5 | 面試模式、網路裝置（containerlab + FRR）、接真實裝置 | 另行設計 |
+| Phase | 類型 | 內容 | 完成定義 |
+|---|---|---|---|
+| 0 | spike | 風險驗證（§7） | R1 到 R5 有實測結果 |
+| 1 | 正式 | 核心：all-in-one binary、Docker provider、terminal 多分頁、timer、checker、SQLite、1 個 fixture lab | 能從瀏覽器完整跑完一題 guided 模式 |
+| 2 | 正式 | 內容系統：docs 面板、tracks、tutorial / real 模式、params 隨機化、precheck、`content lint` | 不改程式碼就能新增 lab / doc / track；§3.9 每個擴充點至少有一個 fixture lab 覆蓋（預計 net × 3、k3s × 2） |
+| 3 | 正式 | 帳號 admin/user、歷史紀錄頁、錄製回放 | 多帳號可各自練習並回看 |
+| 4 | 正式 | 遠端 runner | 成員自架 runner 可接上 |
+| 4 | spike → 正式 | VM provider（libvirt + KVM 巢狀虛擬化、cloud-init 開機時間先驗） | VM 環境的 lab 可跑完 |
+| 5 | 正式 | 面試模式 | 另行設計 |
+| 5 | spike → 正式 | 網路裝置（containerlab + FRR）、接真實裝置 | 另行設計 |
+
+類型定義：**spike** = 消除技術不確定性的拋棄式驗證，放 `spikes/`，不進正式程式碼；**正式** = 依 `.claude/CLAUDE.md` 的三層模型（規劃 / 開發 / 審查）進行。正式 phase 中若某 task 遇到未知數，可切出小 spike 驗完再回來。
+
+**原則：架構優先於內容。** 教學、練習、考驗項目本身是 fixture，用來驗證引擎能力；本專案的產品是「能自由適配這些項目的架構」，不是項目數量。內容產出可交給不懂 Go 的成員或自動化工具，只要遵守 §3.9 的擴充點契約。
 
 ## 10. 待你確認的設計判斷
 
