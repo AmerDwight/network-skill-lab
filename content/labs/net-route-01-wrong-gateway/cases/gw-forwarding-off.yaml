@@ -1,0 +1,2 @@
+setup_env:
+  NSL_GW_FORWARD: "0"

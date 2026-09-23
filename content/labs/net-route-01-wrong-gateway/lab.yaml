@@ -1,0 +1,49 @@
+id: net-route-01-wrong-gateway
+version: 1
+title: { zh: "跨網段連不到資料庫", en: "The database is unreachable across the gateway" }
+topic: net/ip
+level: 3
+modes: [guided, real]
+environment: container
+estimated_minutes: 15
+related_docs: [net/ip/guide, net/ip/playbook-no-connectivity]
+ticket:
+  zh: "web01 上的應用程式連不到資料庫主機 db01（{{ip_db}}）。web01 在 {{subnet_a}}、db01 在 {{subnet_b}}，中間由閘道 gw01 轉送（gw01 在 {{subnet_a}} 是 {{ip_gw_a}}，在 {{subnet_b}} 是 {{ip_gw_b}}）。db01 那側的回程路由已經設好了。請找出原因並修復。"
+  en: "The application on web01 cannot reach the database host db01 ({{ip_db}}). web01 sits on {{subnet_a}}, db01 on {{subnet_b}}, and gw01 routes between them ({{ip_gw_a}} on {{subnet_a}}, {{ip_gw_b}} on {{subnet_b}}). The return route on db01 is already in place. Find the cause and fix it."
+params:
+  subnet_a: { gen: cidr, base: 10.0.0.0/8, prefix: 24 }
+  subnet_b: { gen: cidr, base: 10.0.0.0/8, prefix: 24 }
+  ip_web: { gen: ip_in, subnet: "{{subnet_a}}", index: 10 }
+  ip_gw_a: { gen: ip_in, subnet: "{{subnet_a}}", index: 2 }
+  ip_gw_b: { gen: ip_in, subnet: "{{subnet_b}}", index: 2 }
+  ip_db: { gen: ip_in, subnet: "{{subnet_b}}", index: 10 }
+  wrong_gw: { gen: ip_in, subnet: "{{subnet_a}}", index: 254 }
+cases:
+  - { file: cases/default.yaml, weight: 3 }
+  - { file: cases/gw-forwarding-off.yaml, weight: 1 }
+precheck: { script: precheck.sh, retries: 3 }
+setup: setup.sh
+checkpoints:
+  - id: route-ok
+    title:
+      zh: "web01 往 {{subnet_b}} 的路由指向 {{ip_gw_a}}"
+      en: "web01 routes {{subnet_b}} via {{ip_gw_a}}"
+    node: web01
+    script: checks/01-route-ok.sh
+    visible: true
+  - id: ping-db
+    title:
+      zh: "web01 可以 ping 到 db01（{{ip_db}}）"
+      en: "web01 can ping db01 ({{ip_db}})"
+    node: web01
+    script: checks/02-ping-db.sh
+    visible: true
+    requires: [route-ok, forwarding-on]
+  - id: forwarding-on
+    title:
+      zh: "gw01 有開啟 IPv4 轉送"
+      en: "gw01 forwards IPv4 traffic"
+    node: gw01
+    script: checks/03-forwarding-on.sh
+    visible: false
+solution: { zh: solution.zh.md, en: solution.en.md }

@@ -3,7 +3,7 @@ GO_LDFLAGS := -X main.version=$(VERSION)
 WEB_DIST := internal/web/dist
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null || echo $(shell go env GOPATH)/bin/golangci-lint)
 
-.PHONY: all build web dev lint lint-content test test-integration image clean
+.PHONY: all build web dev lint lint-content test test-integration test-content image clean
 
 all: build
 
@@ -36,6 +36,9 @@ test: web
 
 test-integration: web
 	go test -tags integration -p 1 ./...
+
+test-content: web
+	go test -tags content_integration -p 1 -count=1 ./internal/e2e/...
 
 image:
 	docker build -t nsl/node images/node
