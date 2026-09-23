@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
@@ -247,7 +248,7 @@ func TestSubmitPassesAndWritesProgressOnce(t *testing.T) {
 
 func TestMarkDocReadAndProgressFor(t *testing.T) {
 	fr := &fakeRunner{steps: provisioningSteps}
-	labs, err := content.Load("../../content")
+	labs, err := content.Load(contenttest.Dir())
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}

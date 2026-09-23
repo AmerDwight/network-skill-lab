@@ -11,6 +11,16 @@ func TestLoadRealContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	if len(labs) == 0 {
+		t.Fatal("Load() returned no labs")
+	}
+}
+
+func TestLoadTestdata(t *testing.T) {
+	labs, err := Load("testdata")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
 	if len(labs) != 1 {
 		t.Fatalf("Load() returned %d labs, want 1", len(labs))
 	}
@@ -24,6 +34,20 @@ func TestLoadRealContent(t *testing.T) {
 	}
 	if !slices.Equal(lab.Modes, []string{"guided", "real"}) {
 		t.Errorf("Modes = %v", lab.Modes)
+	}
+	if lab.Precheck != nil {
+		t.Errorf("Precheck = %+v, want none", lab.Precheck)
+	}
+	if len(lab.Cases) != 0 {
+		t.Errorf("Cases = %v, want none", lab.Cases)
+	}
+
+	ids := make([]string, 0, len(lab.Checkpoints))
+	for _, cp := range lab.Checkpoints {
+		ids = append(ids, cp.Id)
+	}
+	if want := []string{"link-up", "ping-peer"}; !slices.Equal(ids, want) {
+		t.Errorf("checkpoints = %v, want %v", ids, want)
 	}
 
 	names := make([]string, 0, len(lab.Params))

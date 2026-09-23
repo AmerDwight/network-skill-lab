@@ -1,0 +1,31 @@
+id: net-ip-01-link-down
+version: 1
+title: { zh: "伺服器連不到對外", en: "Server lost connectivity" }
+topic: net/ip
+level: 2
+modes: [guided, real]
+environment: container
+estimated_minutes: 10
+ticket:
+  zh: "使用者反映 {{node_a}} 無法連到 {{node_b}}（{{ip_b}}）。請找出原因並修復。"
+  en: "Users report {{node_a}} cannot reach {{node_b}} ({{ip_b}}). Find the cause and fix it."
+params:
+  node_a: { gen: const, value: web01 }
+  node_b: { gen: const, value: db01 }
+  subnet: { gen: const, value: 10.0.5.0/24 }
+  ip_a:   { gen: const, value: 10.0.5.10 }
+  ip_b:   { gen: const, value: 10.0.5.20 }
+  iface:  { gen: const, value: eth1 }
+setup: setup.sh
+checkpoints:
+  - id: link-up
+    title: { zh: "{{iface}} 已 UP", en: "{{iface}} is up" }
+    node: web01
+    script: checks/01-link-up.sh
+    visible: true
+  - id: ping-peer
+    title: { zh: "web01 可 ping 到 db01", en: "web01 can ping db01" }
+    node: web01
+    script: checks/02-ping-peer.sh
+    visible: true
+solution: { zh: solution.zh.md, en: solution.en.md }

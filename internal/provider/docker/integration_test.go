@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -22,9 +23,8 @@ import (
 )
 
 const (
-	testImage  = "nsl/node"
-	fixtureID  = "net-ip-01-link-down"
-	contentDir = "../../../content"
+	testImage = "nsl/node"
+	fixtureID = "net-ip-01-link-down"
 )
 
 func newProvider(t *testing.T) (*Provider, client.APIClient) {
@@ -52,7 +52,7 @@ func attemptID(t *testing.T) string {
 
 func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
 	t.Helper()
-	labs, err := content.Load(contentDir)
+	labs, err := content.Load(contenttest.Dir())
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}
