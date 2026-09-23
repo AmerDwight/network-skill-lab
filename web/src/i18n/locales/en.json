@@ -33,7 +33,6 @@
   "attempt.starting": "Starting",
   "attempt.error": "Could not start the lab",
   "attempt.heading": "Attempt",
-  "attempt.id": "Attempt ID",
   "result.heading": "Result",
   "action.cancel": "Cancel",
   "attempt.loading": "Loading the attempt",
