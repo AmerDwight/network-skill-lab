@@ -138,13 +138,18 @@ export interface SubmitResult {
   submit_count: number;
 }
 
+export interface ResultCheckpoint extends AttemptCheckpoint {
+  visible: boolean;
+}
+
 export interface Result {
   attempt_id: string;
   status: AttemptStatus;
   lab: LabSummary;
   elapsed_ms: number;
   command_count: number;
-  checkpoints: AttemptCheckpoint[];
+  checkpoints: ResultCheckpoint[];
+  submit_count: number;
   solution: string;
 }
 

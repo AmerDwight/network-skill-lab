@@ -41,14 +41,17 @@ function makeResult(overrides: Partial<Result> = {}): Result {
         title: "The link is up",
         status: "pass",
         first_passed_at: passedAt,
+        visible: true,
       },
       {
         id: "ping-ok",
         title: "The gateway answers",
         status: "pending",
         first_passed_at: null,
+        visible: true,
       },
     ],
+    submit_count: 0,
     solution: "## Fix\n```sh\nip link set eth0 up\n```\n",
     ...overrides,
   };
@@ -124,6 +127,59 @@ describe("AttemptResultPage", () => {
     expect(screen.getAllByRole("row")).toHaveLength(3);
     expect(screen.getByLabelText("Passed")).toBeDefined();
     expect(screen.getByLabelText("Pending")).toBeDefined();
+  });
+
+  it("marks a hidden checkpoint and moves it below the visible ones", async () => {
+    const result = makeResult();
+    getResult.mockResolvedValue({
+      ...result,
+      checkpoints: [
+        {
+          id: "route-ok",
+          title: "The default route is in place",
+          status: "pass",
+          first_passed_at: passedAt,
+          visible: false,
+        },
+        ...result.checkpoints,
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByRole("table");
+
+    expect(
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.firstElementChild?.textContent),
+    ).toEqual([
+      "The link is up",
+      "The gateway answers",
+      "The default route is in placeHidden",
+    ]);
+    expect(screen.getByText("Hidden").className).toContain("badge--hidden");
+  });
+
+  it("leaves out the submission count when nothing was submitted", async () => {
+    getResult.mockResolvedValue(makeResult());
+
+    renderPage();
+
+    await screen.findByRole("table");
+
+    expect(screen.queryByText("Submissions")).toBeNull();
+  });
+
+  it("shows the submission count for a submitted attempt", async () => {
+    getResult.mockResolvedValue(makeResult({ submit_count: 2 }));
+
+    renderPage();
+
+    const term = await screen.findByText("Submissions");
+
+    expect(term.nextElementSibling?.textContent).toBe("2");
   });
 
   it("collapses the solution for an abandoned attempt", async () => {

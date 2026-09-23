@@ -14,6 +14,11 @@ const instructions = {
 
 export const solution = "## Fix\n```sh\nip link set eth0 up\n```\n";
 
+const hiddenCheckpoint = {
+  id: "route-ok",
+  title: "The default route is in place",
+};
+
 export function modeOf(id) {
   if (id.endsWith("-tutorial")) {
     return "tutorial";
@@ -86,19 +91,27 @@ export function attemptPayload(id) {
 
 export function resultPayload(id) {
   const state = attemptState(id);
+  const fallbackPassedAt = new Date(state.startedAt).toISOString();
   return {
     attempt_id: id,
     status: state.status === "running" ? "passed" : state.status,
     lab: summary(lab),
     elapsed_ms: Date.now() - state.startedAt,
     command_count: 17,
-    checkpoints: state.checkpoints.map((checkpoint, index) => ({
-      ...checkpoint,
-      status: "pass",
-      visible: index === 0,
-      first_passed_at:
-        checkpoint.first_passed_at ?? new Date(state.startedAt).toISOString(),
-    })),
+    checkpoints: [
+      {
+        ...hiddenCheckpoint,
+        status: "pass",
+        visible: false,
+        first_passed_at: fallbackPassedAt,
+      },
+      ...state.checkpoints.map((checkpoint) => ({
+        ...checkpoint,
+        status: "pass",
+        visible: true,
+        first_passed_at: checkpoint.first_passed_at ?? fallbackPassedAt,
+      })),
+    ],
     submit_count: state.submitCount,
     solution,
   };
