@@ -128,6 +128,18 @@ func (h *harness) commands(t *testing.T) []store.CommandEntry {
 	return entries
 }
 
+func waitUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(waitTimeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
 func line(ts, cmd string, exit int) string {
 	return fmt.Sprintf(`{"ts":%q,"user":"nsl","cwd":"/home/nsl","cmd":%q,"exit":%d}`+"\n", ts, cmd, exit)
 }
@@ -214,6 +226,26 @@ func TestFinalPullOnTerminalStatus(t *testing.T) {
 	case h.ticks <- time.Now():
 		t.Fatal("the pull loop is still running after the attempt ended")
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestFinalPullRunsBeforeTheSandboxIsDestroyed(t *testing.T) {
+	h := newHarness(t)
+	h.runner.appendLines("web01", line("2026-09-23T10:00:00.000Z", "ip -br link show eth1", 0))
+	h.pull(t)
+
+	h.runner.appendLines("web01", line("2026-09-23T10:00:05.000Z", "sudo ip link set eth1 up", 0))
+	if err := h.svc.Finish(t.Context(), h.id, store.StatusPassed); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	waitUntil(t, "the sandbox to be destroyed", func() bool { return h.runner.destroys() == 1 })
+
+	entries := h.commands(t)
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(entries))
+	}
+	if entries[1].Command != "sudo ip link set eth1 up" {
+		t.Errorf("last entry = %+v", entries[1])
 	}
 }
 

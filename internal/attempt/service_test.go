@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 const (
 	testIdleTimeout  = 5 * time.Minute
 	testTickInterval = 10 * time.Second
+	testHookTimeout  = 100 * time.Millisecond
 )
 
 var provisioningSteps = []string{"networks", "containers", "bootstrap", "setup"}
@@ -55,6 +58,7 @@ func newHarness(t *testing.T, fr *fakeRunner) *harness {
 		RunnerID:     "fake",
 		IdleTimeout:  testIdleTimeout,
 		TickInterval: testTickInterval,
+		HookTimeout:  testHookTimeout,
 		Now:          clock.Now,
 		After:        clock.After,
 		Logger:       discardLogger(),
@@ -460,5 +464,141 @@ func TestGetUnknownAttempt(t *testing.T) {
 	h := newHarness(t, &fakeRunner{})
 	if _, err := h.Get(context.Background(), "01K0000000000000000000000"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestBeforeDestroyHooksRunBeforeDestroy(t *testing.T) {
+	cases := []struct {
+		name   string
+		status string
+		end    func(t *testing.T, h *harness, id string)
+	}{
+		{"finish", store.StatusPassed, func(t *testing.T, h *harness, id string) {
+			if err := h.Finish(t.Context(), id, store.StatusPassed); err != nil {
+				t.Fatalf("finish: %v", err)
+			}
+		}},
+		{"abandon", store.StatusAbandoned, func(t *testing.T, h *harness, id string) {
+			if _, err := h.Abandon(t.Context(), id); err != nil {
+				t.Fatalf("abandon: %v", err)
+			}
+		}},
+		{"expiry", store.StatusExpired, func(t *testing.T, h *harness, id string) {
+			h.Connected(id)
+			h.Disconnected(id)
+			h.clock.advance(testIdleTimeout)
+			h.clock.fire(t, testIdleTimeout)
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fr := &fakeRunner{}
+			h := newHarness(t, fr)
+
+			var (
+				mu        sync.Mutex
+				order     []string
+				views     []View
+				destroyed []string
+			)
+			record := func(name string) BeforeDestroyFunc {
+				return func(_ context.Context, v View) {
+					mu.Lock()
+					defer mu.Unlock()
+					order = append(order, name)
+					views = append(views, v)
+					destroyed = append(destroyed, fr.destroys()...)
+				}
+			}
+			h.OnBeforeDestroy(record("first"))
+			h.OnBeforeDestroy(record("second"))
+
+			id := h.startRunning(t)
+			tc.end(t, h, id)
+			waitUntil(t, "the sandbox to be destroyed", func() bool { return len(fr.destroys()) == 1 })
+
+			mu.Lock()
+			defer mu.Unlock()
+			if len(order) != 2 || order[0] != "first" || order[1] != "second" {
+				t.Fatalf("hooks ran as %v, want them in registration order", order)
+			}
+			if len(destroyed) != 0 {
+				t.Fatalf("the sandbox was already destroyed when a hook ran: %v", destroyed)
+			}
+			for _, v := range views {
+				if v.Id != id || v.Status != tc.status || v.SandboxID != id {
+					t.Fatalf("hook view = %+v, want attempt %s as %s", v, id, tc.status)
+				}
+			}
+		})
+	}
+}
+
+func TestBeforeDestroyHookDeadlineDoesNotBlockDestroy(t *testing.T) {
+	fr := &fakeRunner{}
+	h := newHarness(t, fr)
+
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	blocked := make(chan struct{})
+	h.OnBeforeDestroy(func(context.Context, View) {
+		close(blocked)
+		<-release
+	})
+
+	id := h.startRunning(t)
+	if _, err := h.Abandon(t.Context(), id); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+
+	select {
+	case <-blocked:
+	case <-time.After(waitTimeout):
+		t.Fatal("the hook never ran")
+	}
+	waitUntil(t, "the sandbox to be destroyed", func() bool { return len(fr.destroys()) == 1 })
+}
+
+func TestBeforeDestroyHookPanicDoesNotBlockDestroy(t *testing.T) {
+	fr := &fakeRunner{}
+	h := newHarness(t, fr)
+
+	var ran atomic.Int64
+	h.OnBeforeDestroy(func(context.Context, View) { panic("boom") })
+	h.OnBeforeDestroy(func(context.Context, View) { ran.Add(1) })
+
+	id := h.startRunning(t)
+	if _, err := h.Abandon(t.Context(), id); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+
+	waitUntil(t, "the sandbox to be destroyed", func() bool { return len(fr.destroys()) == 1 })
+	if ran.Load() != 1 {
+		t.Fatalf("the hook after the panicking one ran %d times, want 1", ran.Load())
+	}
+}
+
+func TestRecoverDoesNotRunBeforeDestroyHooks(t *testing.T) {
+	h := newHarness(t, &fakeRunner{})
+
+	var ran atomic.Int64
+	h.OnBeforeDestroy(func(context.Context, View) { ran.Add(1) })
+
+	startedAt := h.clock.Now().Add(-time.Minute)
+	stale := store.Attempt{
+		ID: store.NewID(), UserID: h.user, LabID: h.lab.Id, LabVersion: h.lab.Version,
+		Mode: "guided", ParamsJSON: "{}", Status: store.StatusRunning,
+		StartedAt: &startedAt, CreatedAt: startedAt,
+	}
+	if err := h.store.Attempts.Create(t.Context(), stale); err != nil {
+		t.Fatalf("create attempt: %v", err)
+	}
+	if err := h.Recover(t.Context()); err != nil {
+		t.Fatalf("recover: %v", err)
+	}
+
+	if ran.Load() != 0 {
+		t.Fatalf("recover ran %d hooks, want none", ran.Load())
 	}
 }
