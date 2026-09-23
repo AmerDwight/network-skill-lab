@@ -7,7 +7,7 @@ Production code is built by three roles, each on a specific model:
 | Role | Model | Does | Does not |
 |---|---|---|---|
 | Planner | Claude Fable 5.1 (main session) | Breaks work into tasks, writes specs with acceptance criteria, sets coding standards, merges | Write production code |
-| Developer | Claude Opus 5 (`Agent`, `model: "opus"`) | Implements one task from its spec, adds tests, reports what was verified | Change scope or decisions; if the spec is unclear, stop and ask the planner |
+| Developer | Claude Opus 5.5 (`Agent`, `model: "opus"`; the alias resolves to the current Opus) | Implements one task from its spec, adds tests, reports what was verified | Change scope or decisions; if the spec is unclear, stop and ask the planner |
 | Reviewer | Claude Haiku 4.5 (`Agent`, `model: "haiku"`) | Reviews the diff against the spec and standards, reports findings ranked by severity | Rewrite code |
 
 Flow: planner writes one spec per phase -> user approves it -> planner splits it into tasks -> developer implements each task on a feature branch -> reviewer reviews -> planner resolves findings (may loop developer) -> PR to `main`.
