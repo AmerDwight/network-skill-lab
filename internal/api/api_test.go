@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -321,4 +323,45 @@ func TestResult(t *testing.T) {
 	}
 
 	requireError(t, h.do(http.MethodGet, "/api/attempts/01NOPE/result", ""), http.StatusNotFound, "not_found")
+}
+
+func TestInternalErrorMessageIsGeneric(t *testing.T) {
+	const want = `{"error":{"code":"internal","message":"internal error"}}` + "\n"
+
+	t.Run("through a handler", func(t *testing.T) {
+		h := newHarness(t)
+		if err := h.store.Close(); err != nil {
+			t.Fatalf("close store: %v", err)
+		}
+
+		resp := h.do(http.MethodGet, "/api/attempts/current", "")
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+		}
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(raw) != want {
+			t.Errorf("body = %q, want %q", raw, want)
+		}
+	})
+
+	t.Run("directly", func(t *testing.T) {
+		s := &server{log: discardLogger()}
+		rec := httptest.NewRecorder()
+
+		s.fail(rec, "01ATTEMPT", errors.New("open /var/lib/nsl/secret.db: permission denied"))
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
+		body := rec.Body.String()
+		if body != want {
+			t.Errorf("body = %q, want %q", body, want)
+		}
+		if strings.Contains(body, "secret.db") || strings.Contains(body, "permission denied") {
+			t.Errorf("body %q leaks the original error", body)
+		}
+	})
 }

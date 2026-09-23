@@ -131,6 +131,8 @@ func (s *server) fail(w http.ResponseWriter, attemptID string, err error) {
 	status, code := classify(err)
 	if status == http.StatusInternalServerError {
 		s.log.Error("request failed", "attempt", attemptID, "error", err)
+		writeError(w, status, code, "internal error")
+		return
 	}
 	writeError(w, status, code, err.Error())
 }
