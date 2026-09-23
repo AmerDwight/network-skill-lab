@@ -1,15 +1,9 @@
 import { useTranslation } from "react-i18next";
 
 import type { AttemptStatus, LabNode } from "../api/types";
+import { formatElapsed } from "../lib/format";
 import type { ConnectionState } from "../ws/socket";
 import type { TerminalState } from "../ws/terminal";
-
-export function formatElapsed(milliseconds: number): string {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
 
 function nodeConnection(
   terminals: Record<string, TerminalState>,

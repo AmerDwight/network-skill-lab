@@ -35,7 +35,6 @@
   "attempt.heading": "Attempt",
   "attempt.id": "Attempt ID",
   "result.heading": "Result",
-  "result.placeholder": "The result view arrives in a later task.",
   "action.cancel": "Cancel",
   "attempt.loading": "Loading the attempt",
   "attempt.loadError": "Could not load the attempt",
@@ -70,5 +69,16 @@
   "terminal.addTab": "+ {{node}}",
   "terminal.exited": "Shell exited",
   "terminal.reconnect": "Reconnect",
-  "terminal.reconnecting": "Disconnected, reconnecting…"
+  "terminal.reconnecting": "Disconnected, reconnecting…",
+  "action.openAttempt": "Go to the attempt",
+  "result.loading": "Loading the result",
+  "result.notFound": "This attempt does not exist.",
+  "result.unfinished": "This attempt is still running.",
+  "result.error": "Could not load the result",
+  "result.elapsed": "Total time",
+  "result.commands": "Commands run",
+  "result.checkpoint": "Checkpoint",
+  "result.status": "Status",
+  "result.passedAt": "Passed at",
+  "result.solution": "Solution"
 }

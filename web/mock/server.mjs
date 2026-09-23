@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 
 const port = 18090;
+const startedAt = Date.now();
 const lab = {
   id: "net-ip-01-link-down",
   title: "Server lost connectivity",
@@ -16,20 +17,19 @@ const nodes = [
   { name: "gw", role: "router" },
 ];
 const checkpoints = [
-  {
-    id: "link-up",
-    title: "The link is up",
-    status: "pending",
-    first_passed_at: null,
-  },
-  {
-    id: "ping-ok",
-    title: "The gateway answers",
-    status: "pending",
-    first_passed_at: null,
-  },
-];
-const startedAt = Date.now();
+  ["link-up", "The link is up"],
+  ["ping-ok", "The gateway answers"],
+].map(([id, title]) => ({
+  id,
+  title,
+  status: "pending",
+  first_passed_at: null,
+}));
+const solution = `## Fix
+\`\`\`sh
+ip link set eth0 up
+\`\`\`
+`;
 
 function attempt(id) {
   return {
@@ -50,20 +50,41 @@ function attempt(id) {
   };
 }
 
+function result(id) {
+  return {
+    attempt_id: id,
+    status: "passed",
+    lab,
+    elapsed_ms: 254000,
+    command_count: 17,
+    checkpoints: checkpoints.map((checkpoint, index) => ({
+      ...checkpoint,
+      status: "pass",
+      first_passed_at: new Date(startedAt + index * 60000).toISOString(),
+    })),
+    solution,
+  };
+}
+
+const abandoned = (id) => ({ ...attempt(id), status: "abandoned" });
+
+const routes = [
+  [/^\/api\/attempts\/([^/]+)$/, attempt],
+  [/^\/api\/attempts\/([^/]+)\/result$/, result],
+  [/^\/api\/attempts\/([^/]+)\/abandon$/, abandoned],
+];
+
 const server = createServer((request, response) => {
   const path = new URL(request.url, "http://localhost").pathname;
-  const match = /^\/api\/attempts\/([^/]+)$/.exec(path);
-  if (match) {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(attempt(match[1])));
-    return;
+  response.setHeader("Content-Type", "application/json");
+  for (const [pattern, body] of routes) {
+    const match = pattern.exec(path);
+    if (match) {
+      response.end(JSON.stringify(body(match[1])));
+      return;
+    }
   }
-  if (/^\/api\/attempts\/[^/]+\/abandon$/.test(path)) {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ ...attempt("mock"), status: "abandoned" }));
-    return;
-  }
-  response.writeHead(404, { "Content-Type": "application/json" });
+  response.writeHead(404);
   response.end(JSON.stringify({ error: { code: "not_found", message: path } }));
 });
 

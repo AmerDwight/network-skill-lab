@@ -8,6 +8,7 @@ import {
   getCurrentAttempt,
   getHealth,
   getLab,
+  getResult,
   listLabs,
 } from "./client";
 
@@ -138,6 +139,30 @@ describe("getCurrentAttempt", () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { id: "01J" }));
 
     await expect(getCurrentAttempt()).resolves.toMatchObject({ id: "01J" });
+  });
+});
+
+describe("getResult", () => {
+  it("asks for the result of an attempt", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { attempt_id: "01J" }));
+
+    await expect(getResult("01J")).resolves.toMatchObject({
+      attempt_id: "01J",
+    });
+    expect(lastUrl()).toBe("/api/attempts/01J/result?lang=zh-TW");
+  });
+
+  it("raises an ApiError on 409 while the attempt is unfinished", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(409, {
+        error: { code: "attempt_running", message: "not finished" },
+      }),
+    );
+
+    await expect(getResult("01J")).rejects.toMatchObject({
+      status: 409,
+      code: "attempt_running",
+    });
   });
 });
 

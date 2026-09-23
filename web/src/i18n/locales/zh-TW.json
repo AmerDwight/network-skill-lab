@@ -35,7 +35,6 @@
   "attempt.heading": "練習",
   "attempt.id": "練習 ID",
   "result.heading": "結果",
-  "result.placeholder": "結果頁在後續 task 才會出現。",
   "action.cancel": "取消",
   "attempt.loading": "載入練習中",
   "attempt.loadError": "無法載入練習",
@@ -70,5 +69,16 @@
   "terminal.addTab": "+ {{node}}",
   "terminal.exited": "Shell 已結束",
   "terminal.reconnect": "重新連線",
-  "terminal.reconnecting": "已斷線，重新連線中…"
+  "terminal.reconnecting": "已斷線，重新連線中…",
+  "action.openAttempt": "回到練習",
+  "result.loading": "載入結果中",
+  "result.notFound": "找不到這次練習。",
+  "result.unfinished": "這次練習還在進行中。",
+  "result.error": "無法載入結果",
+  "result.elapsed": "總時間",
+  "result.commands": "指令數",
+  "result.checkpoint": "檢查點",
+  "result.status": "狀態",
+  "result.passedAt": "通過時間",
+  "result.solution": "解答"
 }
