@@ -73,14 +73,17 @@ func (t *terminalSession) close() {
 		pty, cast := t.pty, t.cast
 		t.closed = true
 		t.mu.Unlock()
+		t.socket.out.finish()
 		if pty != nil {
 			_ = pty.Close()
 		}
 		if cast != nil {
 			_ = cast.Close()
 		}
-		_ = t.socket.conn.CloseNow()
 		t.cancel()
+		// CloseNow waits for an in-flight graceful close of the same connection,
+		// which must not hold up the request that is replacing this session.
+		go func() { _ = t.socket.conn.CloseNow() }()
 	})
 }
 
