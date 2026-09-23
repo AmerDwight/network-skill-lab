@@ -21,6 +21,7 @@ Specs are one HTML file per phase in `docs/specs/phase<N>.html`, written in Trad
 - **Design before code.** `docs/DESIGN.md` is the source of truth. Decisions D1..Dn are settled; changing one needs explicit user confirmation.
 - **Architecture over content.** Labs, docs and tracks are fixtures that exercise the engine. The goal is a content system that accepts new items without code changes, not the number of items shipped.
 - **Spikes never ship.** Production code must not import from `spikes/`.
+- **Engine tests never depend on shipped content.** Tests outside `internal/content` use frozen fixtures under `internal/content/testdata/` (loaded via a helper), never `content/`. `content/` is exercised only by the content loader test and `nsl content lint`, so labs can evolve without breaking the engine suite.
 - **Branching.** GitHub flow: feature branch -> PR -> squash merge into `main`. Never commit directly to `main`.
 - **Naming.** Go module `github.com/AmerDwight/network-skill-lab`, binary `nsl`, image `nsl/node`, env prefix `NSL_`.
 - **Code style.** Standard idiomatic style only: `gofmt` + `golangci-lint` defaults for Go, `eslint` + `prettier` defaults with strict TypeScript. No project-specific conventions beyond that.
