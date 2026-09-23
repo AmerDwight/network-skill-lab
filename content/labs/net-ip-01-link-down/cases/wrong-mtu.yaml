@@ -1,0 +1,4 @@
+params:
+  fault: { gen: const, value: mtu }
+setup_env:
+  NSL_FAULT_MTU: "1200"
