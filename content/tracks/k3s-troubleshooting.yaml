@@ -1,0 +1,6 @@
+id: k3s-troubleshooting
+title: { zh: "k3s 排查入門", en: "k3s troubleshooting" }
+steps:
+  - doc: k3s/pods/guide
+  - { lab: k3s-pod-01-crashloop, mode: tutorial }
+  - { lab: k3s-svc-01-selector, mode: guided }

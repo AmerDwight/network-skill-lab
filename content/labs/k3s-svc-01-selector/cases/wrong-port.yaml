@@ -1,0 +1,2 @@
+setup_env:
+  NSL_SVC_TARGET_OFF: "1"

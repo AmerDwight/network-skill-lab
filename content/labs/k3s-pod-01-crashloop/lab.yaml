@@ -1,0 +1,173 @@
+id: k3s-pod-01-crashloop
+version: 1
+title: { zh: "Pod 一直重啟", en: "A pod keeps restarting" }
+topic: k3s/pods
+level: 2
+modes: [tutorial, guided]
+environment: container
+estimated_minutes: 15
+internet: false
+related_docs: [k3s/pods/guide]
+ticket:
+  zh: "{{namespace}} 命名空間裡的 {{app}} 一直重啟，工程師說「部署完就沒有一個 Pod 活著」。請找出重啟的原因，讓 {{replicas}} 個 Pod 都穩定跑起來。"
+  en: "{{app}} in namespace {{namespace}} keeps restarting; the team reports that no pod stays alive after the deploy. Find out why it restarts and get all {{replicas}} pods running steadily."
+params:
+  image: { gen: const, value: "docker.io/rancher/mirrored-library-busybox:1.37.0" }
+  subnet: { gen: cidr, base: 10.128.0.0/9, prefix: 24 }
+  ip_k3s: { gen: ip_in, subnet: "{{subnet}}", index: 10 }
+  ip_ops: { gen: ip_in, subnet: "{{subnet}}", index: 20 }
+  namespace: { gen: choice, of: [shop, billing, inventory] }
+  app: { gen: choice, of: [checkout, catalog, worker] }
+  replicas: { gen: int, min: 1, max: 2 }
+precheck: { script: precheck.sh, retries: 3 }
+setup: setup.sh
+checkpoints:
+  - id: pods-running
+    title:
+      zh: "{{app}} 的 {{replicas}} 個 Pod 都穩定 Running"
+      en: "all {{replicas}} pods of {{app}} stay Running"
+    node: k3s01
+    script: checks/01-pods-running.sh
+    visible: true
+  - id: deploy-available
+    title:
+      zh: "{{app}} 的 rollout 完成"
+      en: "the rollout of {{app}} is complete"
+    node: k3s01
+    script: checks/02-deploy-available.sh
+    visible: true
+    requires: [pods-running]
+tutorial:
+  - checkpoint: pods-running
+    instruction:
+      zh: |
+        在 `k3s01` 上操作，kubeconfig 已經設定好，直接下 `kubectl` 就可以。
+
+        先看 Pod 現在是什麼狀態：
+
+        ```
+        kubectl -n {{namespace}} get pods
+        ```
+
+        `STATUS` 欄會看到 `CrashLoopBackOff`，`RESTARTS` 一路往上加。這代表容器有起來、但立刻就結束了，kubelet 依退避時間（10 秒、20 秒、40 秒……）不斷重試。這跟 `ImagePullBackOff`（拉不到映像）和 `Pending`（排不進任何節點）是完全不同的三件事。
+
+        再看 Pod 的事件，確認不是排程或映像的問題：
+
+        ```
+        kubectl -n {{namespace}} describe pod -l app={{app}}
+        ```
+
+        輸出最下面的 `Events` 會有 `Started container` 接著 `Back-off restarting failed container`，代表容器真的執行過。
+
+        容器已經死掉了，所以要看**上一次**的日誌：
+
+        ```
+        kubectl -n {{namespace}} logs -l app={{app}} --previous
+        ```
+
+        只印出一行 `booting`，沒有任何錯誤訊息——程式印完就自己結束了。回頭看 Deployment 的 command：
+
+        ```
+        kubectl -n {{namespace}} get deploy {{app}} -o jsonpath='{.spec.template.spec.containers[0].command}'
+        ```
+
+        是 `["sh","-c","echo booting; exit 1"]`：印一行就 `exit 1`。容器的主行程結束，Pod 就結束，這是典型的「把一次性指令當成常駐服務跑」。
+
+        把 command 換成會一直跑的指令：
+
+        ```
+        kubectl -n {{namespace}} patch deploy {{app}} --type=json \
+          -p='[{"op":"replace","path":"/spec/template/spec/containers/0/command","value":["sleep","3600"]}]'
+        ```
+
+        也可以用 `kubectl -n {{namespace}} edit deploy {{app}}` 直接改同一個欄位，效果一樣。
+
+        改完之後新的 ReplicaSet 會建新的 Pod。這個 Deployment 設了 `minReadySeconds: 10`，Pod 要連續 Running 10 秒才算「可用」，所以打勾會晚個十幾秒，這是正常的：
+
+        ```
+        kubectl -n {{namespace}} get pods -w
+        ```
+      en: |
+        Work on `k3s01`; the kubeconfig is already in place, so `kubectl` works as is.
+
+        Start with the state of the pods:
+
+        ```
+        kubectl -n {{namespace}} get pods
+        ```
+
+        `STATUS` shows `CrashLoopBackOff` and `RESTARTS` keeps climbing. That means the container did start and then exited immediately, so kubelet retries with a growing back-off (10s, 20s, 40s, …). It is a different failure from `ImagePullBackOff` (the image cannot be fetched) and from `Pending` (the pod cannot be scheduled at all).
+
+        Read the pod events to rule out scheduling and image problems:
+
+        ```
+        kubectl -n {{namespace}} describe pod -l app={{app}}
+        ```
+
+        At the bottom, `Events` shows `Started container` followed by `Back-off restarting failed container`, so the container really ran.
+
+        The container is already dead, so ask for the logs of the **previous** run:
+
+        ```
+        kubectl -n {{namespace}} logs -l app={{app}} --previous
+        ```
+
+        A single `booting` line and no error: the program printed and then exited on its own. Look at the command of the Deployment:
+
+        ```
+        kubectl -n {{namespace}} get deploy {{app}} -o jsonpath='{.spec.template.spec.containers[0].command}'
+        ```
+
+        It is `["sh","-c","echo booting; exit 1"]`: print one line, then `exit 1`. When the main process of a container ends, the pod ends. This is the classic case of running a one-shot command as if it were a long-lived service.
+
+        Replace the command with one that keeps running:
+
+        ```
+        kubectl -n {{namespace}} patch deploy {{app}} --type=json \
+          -p='[{"op":"replace","path":"/spec/template/spec/containers/0/command","value":["sleep","3600"]}]'
+        ```
+
+        `kubectl -n {{namespace}} edit deploy {{app}}` on the same field does exactly the same thing.
+
+        The change creates a new ReplicaSet with new pods. The Deployment sets `minReadySeconds: 10`, so a pod counts as available only after ten uninterrupted seconds of Running; the tick therefore arrives a dozen seconds later, which is expected:
+
+        ```
+        kubectl -n {{namespace}} get pods -w
+        ```
+  - checkpoint: deploy-available
+    instruction:
+      zh: |
+        Pod 起來不等於 rollout 完成。用 Deployment 自己的判斷再確認一次：
+
+        ```
+        kubectl -n {{namespace}} rollout status deploy/{{app}}
+        ```
+
+        看到 `successfully rolled out` 就代表新的 ReplicaSet 已經達到期望的副本數、舊的也收乾淨了。
+
+        想看數字對不對，直接讀狀態欄位：
+
+        ```
+        kubectl -n {{namespace}} get deploy {{app}}
+        kubectl -n {{namespace}} get deploy {{app}} -o jsonpath='{.status.availableReplicas}'
+        ```
+
+        `READY` 應該是 {{replicas}}/{{replicas}}，`availableReplicas` 應該是 {{replicas}}。兩個數字對上，這題就完成了。
+      en: |
+        Pods being up is not the same as a finished rollout. Ask the Deployment itself:
+
+        ```
+        kubectl -n {{namespace}} rollout status deploy/{{app}}
+        ```
+
+        `successfully rolled out` means the new ReplicaSet reached the desired count and the old one is gone.
+
+        To see the numbers behind it, read the status fields:
+
+        ```
+        kubectl -n {{namespace}} get deploy {{app}}
+        kubectl -n {{namespace}} get deploy {{app}} -o jsonpath='{.status.availableReplicas}'
+        ```
+
+        `READY` should be {{replicas}}/{{replicas}} and `availableReplicas` should be {{replicas}}. Once they match, you are done.
+solution: { zh: solution.zh.md, en: solution.en.md }

@@ -1,0 +1,7 @@
+id: network-basics
+title: { zh: "網路基礎排查", en: "Network troubleshooting basics" }
+steps:
+  - doc: net/ip/guide
+  - { lab: net-ip-01-link-down, mode: tutorial }
+  - { lab: net-ip-01-link-down, mode: guided }
+  - doc: net/ip/playbook-no-connectivity

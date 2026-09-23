@@ -1,0 +1,51 @@
+id: k3s-svc-01-selector
+version: 1
+title: { zh: "Service 連不到後端 Pod", en: "A service never reaches its pods" }
+topic: k3s/service
+level: 3
+modes: [guided, real]
+environment: container
+estimated_minutes: 15
+internet: false
+related_docs: [k3s/pods/guide]
+ticket:
+  zh: "{{namespace}} 命名空間的 {{app}} service 連不上，從叢集內打 ClusterIP 的 {{port}} 埠一律 connection refused，但 Pod 看起來是 Running。請讓 service 正常回應。"
+  en: "The {{app}} service in {{namespace}} returns connection refused on port {{port}} from inside the cluster, even though its pod looks Running. Make the service answer again."
+params:
+  image: { gen: const, value: "docker.io/rancher/mirrored-library-busybox:1.37.0" }
+  service_cidr: { gen: const, value: "10.43.0.0/16" }
+  subnet: { gen: cidr, base: 10.128.0.0/9, prefix: 24 }
+  ip_server: { gen: ip_in, subnet: "{{subnet}}", index: 10 }
+  ip_agent: { gen: ip_in, subnet: "{{subnet}}", index: 20 }
+  namespace: { gen: choice, of: [shop, billing, inventory] }
+  app: { gen: choice, of: [checkout, catalog, worker] }
+  port: { gen: int, min: 8000, max: 8999 }
+cases:
+  - { file: cases/default.yaml, weight: 3 }
+  - { file: cases/wrong-port.yaml, weight: 1 }
+precheck: { script: precheck.sh, retries: 3 }
+setup: setup.sh
+checkpoints:
+  - id: endpoints-ok
+    title:
+      zh: "{{app}} service 至少有一個 ready 的 endpoint"
+      en: "the {{app}} service has at least one ready endpoint"
+    node: k3s01
+    script: checks/01-endpoints-ok.sh
+    visible: true
+  - id: curl-ok
+    title:
+      zh: "從 k3s01 打 {{app}} 的 ClusterIP:{{port}} 會回 ok"
+      en: "the ClusterIP of {{app}} answers ok on port {{port}} from k3s01"
+    node: k3s01
+    script: checks/02-curl-ok.sh
+    visible: true
+    requires: [endpoints-ok]
+  - id: pod-on-agent
+    title:
+      zh: "{{app}} 的 Pod 仍然跑在 k3s02 上"
+      en: "the pod of {{app}} still runs on k3s02"
+    node: k3s01
+    script: checks/03-pod-on-agent.sh
+    visible: false
+solution: { zh: solution.zh.md, en: solution.en.md }

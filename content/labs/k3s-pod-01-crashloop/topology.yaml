@@ -1,0 +1,7 @@
+nodes:
+  k3s01: { role: k3s-server }
+  ops01: { role: ubuntu }
+links:
+  - endpoints: ["k3s01:eth1", "ops01:eth1"]
+    subnet: "{{subnet}}"
+    addresses: { k3s01: "{{ip_k3s}}/24", ops01: "{{ip_ops}}/24" }
