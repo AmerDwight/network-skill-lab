@@ -1,0 +1,51 @@
+id: net-dns-01-resolved
+version: 1
+title: { zh: "內部名稱解不出來", en: "An internal name will not resolve" }
+topic: net/dns
+level: 2
+modes: [guided, real]
+environment: container
+internet: false
+estimated_minutes: 10
+related_docs: [net/dns/guide]
+ticket:
+  zh: "web01 解不出 {{host}}.{{domain}}，應用程式因此連不上。這段網路的 DNS 伺服器是 {{ip_dns}}（dns01），它本身是好的。請找出 web01 為什麼解不出來並修復。"
+  en: "web01 cannot resolve {{host}}.{{domain}}, so the application cannot connect. The DNS server for this network is {{ip_dns}} (dns01) and it is healthy. Find out why web01 fails to resolve and fix it."
+params:
+  subnet: { gen: cidr, base: 10.0.0.0/8, prefix: 24 }
+  ip_web: { gen: ip_in, subnet: "{{subnet}}", index: 10 }
+  ip_dns: { gen: ip_in, subnet: "{{subnet}}", index: 53 }
+  wrong_dns: { gen: ip_in, subnet: "{{subnet}}", index: 250 }
+  ip_target: { gen: ip_in, subnet: "{{subnet}}", index: 80 }
+  host: { gen: choice, of: [app, api, portal] }
+  domain: { gen: choice, of: [lab.internal, corp.test] }
+  ttl: { gen: int, min: 30, max: 300 }
+cases:
+  - { file: cases/default.yaml, weight: 3 }
+  - { file: cases/stub-disabled.yaml, weight: 1 }
+precheck: { script: precheck.sh, retries: 3 }
+setup: setup.sh
+checkpoints:
+  - id: dns-server-ok
+    title:
+      zh: "web01 的 eth1 指向 {{ip_dns}}"
+      en: "eth1 on web01 points at {{ip_dns}}"
+    node: web01
+    script: checks/01-dns-server-ok.sh
+    visible: true
+  - id: stub-ok
+    title:
+      zh: "web01 的 /etc/resolv.conf 是 resolved 的 stub 連結"
+      en: "/etc/resolv.conf on web01 is the resolved stub symlink"
+    node: web01
+    script: checks/02-stub-ok.sh
+    visible: true
+  - id: resolves
+    title:
+      zh: "web01 解得出 {{host}}.{{domain}} 是 {{ip_target}}"
+      en: "web01 resolves {{host}}.{{domain}} to {{ip_target}}"
+    node: web01
+    script: checks/03-resolves.sh
+    visible: true
+    requires: [dns-server-ok, stub-ok]
+solution: { zh: solution.zh.md, en: solution.en.md }

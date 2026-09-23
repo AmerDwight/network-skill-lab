@@ -5,3 +5,5 @@ steps:
   - { lab: net-ip-01-link-down, mode: tutorial }
   - { lab: net-ip-01-link-down, mode: guided }
   - doc: net/ip/playbook-no-connectivity
+  - { lab: net-route-01-wrong-gateway, mode: real }
+  - { lab: net-dns-01-resolved, mode: guided }

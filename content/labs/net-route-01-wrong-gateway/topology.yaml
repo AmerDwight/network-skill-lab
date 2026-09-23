@@ -1,0 +1,11 @@
+nodes:
+  web01: { role: ubuntu }
+  gw01:  { role: ubuntu }
+  db01:  { role: ubuntu }
+links:
+  - endpoints: ["web01:eth1", "gw01:eth1"]
+    subnet: "{{subnet_a}}"
+    addresses: { web01: "{{ip_web}}/24", gw01: "{{ip_gw_a}}/24" }
+  - endpoints: ["gw01:eth2", "db01:eth1"]
+    subnet: "{{subnet_b}}"
+    addresses: { gw01: "{{ip_gw_b}}/24", db01: "{{ip_db}}/24" }
