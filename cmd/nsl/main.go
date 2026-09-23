@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/config"
+	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 	"github.com/AmerDwight/network-skill-lab/internal/web"
 )
@@ -69,6 +70,12 @@ func serve(args []string) error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 	slog.SetDefault(logger)
+
+	labs, err := content.Load(cfg.ContentDir)
+	if err != nil {
+		return fmt.Errorf("load content: %w", err)
+	}
+	logger.Info("labs loaded", "count", len(labs), "dir", cfg.ContentDir)
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
