@@ -50,6 +50,7 @@ type SandboxSpec struct {
 	Links     []LinkSpec
 	Setup     Script
 	Env       map[string]string
+	Progress  func(step string)
 }
 
 type ExecOptions struct {
