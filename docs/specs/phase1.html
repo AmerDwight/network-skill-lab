@@ -1,0 +1,354 @@
+<title>Phase 1 核心引擎</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8;--surface:#ffffff;--ink:#17222b;--muted:#5b6b76;--line:#d9e0e4;
+  --accent:#0f6e6c;--accent-ink:#ffffff;--accent-soft:#dff0ee;
+  --warn-soft:#fbeedb;--warn:#8a5a0b;--pending-soft:#e9e6f7;--pending:#4d3f9e;
+  --code-bg:#eef2f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+    --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+    --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+    --code-bg:#0b1014;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+  --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+  --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+  --code-bg:#0b1014;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;}
+.wrap{max-width:900px;margin:0 auto;padding-block:40px 80px;padding-inline:20px;}
+h1,h2,h3,h4{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:30px;font-weight:700}
+h2{font-size:20px;font-weight:700;margin-top:56px;padding-bottom:8px;border-bottom:2px solid var(--line);display:flex;align-items:baseline;gap:12px}
+h2 .n{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);letter-spacing:.08em}
+h3{font-size:16px;font-weight:700;margin-top:28px}
+h4{font-size:14.5px;font-weight:700;margin-top:18px}
+p{margin:12px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;color:var(--muted);font-size:13px;margin-top:14px}
+.meta b{color:var(--ink);font-weight:500}
+.lede{font-size:16px;color:var(--muted);margin-top:18px;max-width:66ch}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px}
+code{background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;line-height:1.55;margin:12px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+.tbl{overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;background:var(--surface)}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:2px 8px;border-radius:999px;letter-spacing:.04em;vertical-align:middle}
+.tag.risk{background:var(--accent-soft);color:var(--accent)}
+.tag.pending{background:var(--pending-soft);color:var(--pending)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-top:22px}
+.card header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;margin-bottom:6px}
+.card header h3{margin:0}
+.card header .id{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-weight:500}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;margin-top:10px}
+.grid>div>b{display:block;font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;margin-bottom:2px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.decision{border-left:3px solid var(--pending);padding:2px 0 2px 16px;margin:18px 0}
+.decision b.q{display:block}
+.decision .why{color:var(--muted);font-size:14px}
+.callout{background:var(--accent-soft);border-radius:8px;padding:16px 20px;margin:20px 0}
+.callout p{margin:6px 0}
+.approve{margin-top:48px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--surface)}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">network-skill-lab · spec</div>
+<h1>Phase 1 核心引擎</h1>
+<div class="meta">
+  <span>類型 <b>正式開發（三層模型）</b></span>
+  <span>版本 <b>v1 草案</b></span>
+  <span>日期 <b>2026-09-23</b></span>
+  <span>撰寫 <b>Fable 5.1（planner）</b></span>
+  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+</div>
+<p class="lede">從瀏覽器完整跑完一題 guided 模式：選 lab、沙箱建起來、在兩個節點的 terminal 裡修好問題、checkpoint 即時打勾、自動結束、看到總時間與指令數。這一個 phase 把 DESIGN.md §2 的每個元件都做出最小可用版本，之後的 phase 只往上疊。</p>
+
+<h2><span class="n">01</span>目標與完成定義</h2>
+<p><b>完成定義</b>（全部成立才算完成）：</p>
+<ol>
+<li><code>make build</code> 產出單一 binary <code>nsl</code>，內含前端；<code>nsl serve</code> 啟動後開瀏覽器即可使用，不需登入。</li>
+<li>Lab 列表顯示 fixture lab <code>net-ip-01-link-down</code>，點「開始（guided）」後 15 秒內看到兩個節點的 terminal。</li>
+<li>在 terminal 裡修好問題後，checkpoint 在 5 秒內打勾；全部通過後自動停錶並跳到結果頁，顯示總時間、指令數、每個 checkpoint 的通過時間，沙箱被銷毀。</li>
+<li>放棄、關瀏覽器 15 分鐘、伺服器重啟，三種情況沙箱都會被回收，不留孤兒容器與網路。</li>
+<li>CI 綠燈：Go 與 TypeScript 的 lint、單元測試；Docker 整合測試在本機 <code>make test-integration</code> 通過。</li>
+<li>指令歷史與 pty 錄影都落到磁碟並寫入資料庫（回放 UI 是 Phase 3）。</li>
+</ol>
+
+<h2><span class="n">02</span>範圍</h2>
+<div class="tbl"><table>
+<tr><th>在範圍內</th><th>不在範圍內（留給後面的 phase）</th></tr>
+<tr><td>
+<ul>
+<li>Go binary <code>nsl</code>：<code>serve</code> 子指令，設定走 <code>NSL_*</code> 環境變數</li>
+<li>內容載入：lab.yaml + topology.yaml 的 Phase 1 子集（§05），啟動時嚴格驗證</li>
+<li>Runner 介面 + in-process Docker provider（§06）</li>
+<li>Attempt 生命週期、計時、heartbeat 與逾時回收、啟動時孤兒清理（§07）</li>
+<li>Checker（§08）、Recorder：指令歷史拉取 + asciicast 錄製（§09）</li>
+<li>REST + WebSocket API（§10）</li>
+<li>Web UI：lab 列表、練習頁（工單、checkpoint、多分頁 terminal、狀態列）、結果頁；UI 字串雙語（§11）</li>
+<li>SQLite 儲存與 migration（§12）</li>
+<li>一個 fixture lab，含 setup、checks、solution</li>
+<li>CI、Makefile、開發環境（§13）</li>
+</ul>
+</td><td>
+<ul>
+<li>tutorial / real 模式、提交流程 → Phase 2</li>
+<li>params 產生器（Phase 1 只支援 <code>const</code>）、cases、precheck 重試 → Phase 2</li>
+<li>docs 面板、tracks、topics 導覽、<code>content lint</code> 指令 → Phase 2</li>
+<li>k3s fixture lab（provider 會把 k3s role 傳給 bootstrap，但 Phase 1 不測）→ Phase 2</li>
+<li>帳號登入、admin、歷史紀錄頁、錄影回放 → Phase 3</li>
+<li>遠端 runner、VM provider → Phase 4</li>
+</ul>
+</td></tr>
+</table></div>
+
+<h2><span class="n">03</span>待批的提案</h2>
+<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+
+<div class="decision"><b class="q">P1 CI：GitHub Actions，每個 PR 跑 lint 與單元測試；Docker 整合測試只在本機</b>
+<code>go vet</code>、<code>golangci-lint</code>、<code>go test ./...</code>、<code>eslint</code>、<code>tsc --noEmit</code>、<code>vitest</code>。需要 Docker 的測試打 build tag <code>integration</code>，<code>make test-integration</code> 在本機跑。
+<div class="why">理由：GitHub 的免費 runner 沒有 privileged 容器與 systemd。</div></div>
+
+<div class="decision"><b class="q">P2 main 分支保護：必須走 PR、CI 綠燈、squash merge</b>
+你一個人時自己 approve。我會用 <code>gh api</code> 設定，需要你同意。
+<div class="why">理由：前兩個 PR 是 merge commit 進去的，之後團隊加入前先把規則固定。</div></div>
+
+<div class="decision"><b class="q">P3 License：MIT</b>
+repo 是公開的，沒有 license 等於別人不能合法使用或貢獻。
+<div class="why">理由：你要給團隊與面試者用，MIT 最不礙事。若你打算轉私有或另有考量，這條改掉即可。</div></div>
+
+<div class="decision"><b class="q">P4 SQLite 用 <code>modernc.org/sqlite</code>（純 Go，無 cgo）</b>
+<div class="why">理由：交叉編譯與 CI 都不用裝 gcc；效能對單人使用綽綽有餘。</div></div>
+
+<div class="decision"><b class="q">P5 前端以 <code>go:embed</code> 打包進 binary；開發時 Vite dev server 反向代理到 Go</b>
+<div class="why">理由：符合 D3 all-in-one；部署只有一個檔案。</div></div>
+
+<div class="decision"><b class="q">P6 Phase 1 不做登入：資料庫預建一個 <code>local</code> 使用者，所有 attempt 掛在它名下</b>
+<div class="why">理由：D6 的帳號功能排在 Phase 3；資料模型從現在就有 user_id，之後只加登入不改 schema。</div></div>
+
+<div class="decision"><b class="q">P7 Terminal 以 <code>nsl</code> 使用者登入（sudo NOPASSWD），不是 root</b>
+<div class="why">理由：貼近真實伺服器操作；題目需要 root 時使用者自己 sudo，這本身就是練習的一部分。setup / checks 腳本仍以 root 執行。</div></div>
+
+<div class="decision"><b class="q">P8 Guided 模式的結束條件：某一次 checker 掃描中所有 checkpoint 同時通過</b>
+每個 checkpoint 記 <code>first_passed_at</code> 與最近狀態；UI 顯示最近狀態（修好又弄壞會變回未通過）。
+<div class="why">理由：避免使用者先修 A 再弄壞 A 去修 B，最後系統卻判定通過。</div></div>
+
+<div class="decision"><b class="q">P9 Docker 資源以 label 標記，啟動時清孤兒</b>
+所有容器與網路帶 <code>nsl.attempt=&lt;id&gt;</code> 與 <code>nsl.managed=true</code>；<code>nsl serve</code> 啟動時把資料庫裡非終態的 attempt 標為 <code>expired</code>，並刪掉所有帶 label 的 Docker 資源。
+<div class="why">理由：伺服器重啟後不可能恢復 pty 連線，直接回收最乾淨。</div></div>
+
+<h2><span class="n">04</span>架構與模組</h2>
+<pre><code>cmd/nsl/main.go              子指令：serve（Phase 2 加 content lint）
+internal/
+  config/       NSL_* 環境變數 → Config 結構
+  content/      載入與驗證 content/ 目錄；型別 Lab, Topology, Checkpoint
+  store/        SQLite；migration；每張表一個 repository
+  runner/       Runner 介面（DESIGN.md §2.2）與型別 SandboxSpec, PTY, ExecResult
+  provider/docker/  實作 Runner：網路、容器、bootstrap、exec、pty、銷毀、GC
+  attempt/      生命週期狀態機、計時、heartbeat、逾時、事件廣播
+  checker/      週期執行 checkpoint 腳本，回報結果給 attempt
+  recorder/     指令歷史拉取、asciicast 寫檔
+  api/          chi router；REST handlers；WS handlers（events、terminal）
+  web/          go:embed 的前端產物
+web/            React + TypeScript + Vite；xterm.js；dockview
+content/        labs/net-ip-01-link-down/…
+images/node/    （Phase 0 產物，不動）</code></pre>
+<p><b>依賴方向</b>：<code>api → attempt → {runner, checker, recorder, store, content}</code>；<code>provider/docker → runner</code>（實作介面）。<code>attempt</code> 不 import <code>provider/docker</code>，只認 <code>runner.Runner</code>。</p>
+<p><b>第三方套件</b>（固定，開發者不自行加大件）：<code>go-chi/chi</code>、<code>coder/websocket</code>、<code>docker/docker</code> client、<code>modernc.org/sqlite</code>、<code>goccy/go-yaml</code>；前端 <code>react</code>、<code>@xterm/xterm</code> + <code>addon-fit</code> + <code>addon-attach</code>、<code>dockview</code>、<code>i18next</code>、<code>zustand</code>。</p>
+
+<h2><span class="n">05</span>內容格式：Phase 1 子集</h2>
+<p>載入器只接受下列欄位，其他欄位一律報錯（之後的 phase 再放寬），避免內容偷偷依賴未實作的功能。</p>
+<pre><code># lab.yaml
+id: net-ip-01-link-down
+version: 1
+title: { zh: "伺服器連不到對外", en: "Server lost connectivity" }
+topic: net/ip
+level: 2
+modes: [guided]
+environment: container
+estimated_minutes: 10
+ticket:
+  zh: "使用者反映 {{node_a}} 無法連到 {{node_b}}（{{ip_b}}）。請找出原因並修復。"
+  en: "Users report {{node_a}} cannot reach {{node_b}} ({{ip_b}}). Find the cause and fix it."
+params:
+  node_a: { gen: const, value: web01 }
+  node_b: { gen: const, value: db01 }
+  subnet: { gen: const, value: 10.0.5.0/24 }
+  ip_a:   { gen: const, value: 10.0.5.10 }
+  ip_b:   { gen: const, value: 10.0.5.20 }
+  iface:  { gen: const, value: eth1 }
+setup: setup.sh
+checkpoints:
+  - id: link-up
+    title: { zh: "{{iface}} 已 UP", en: "{{iface}} is up" }
+    node: web01
+    script: checks/01-link-up.sh
+    visible: true
+  - id: ping-peer
+    title: { zh: "web01 可 ping 到 db01", en: "web01 can ping db01" }
+    node: web01
+    script: checks/02-ping-peer.sh
+    visible: true
+solution: { zh: solution.zh.md, en: solution.en.md }
+
+# topology.yaml
+nodes:
+  web01: { role: ubuntu }
+  db01:  { role: ubuntu }
+links:
+  - endpoints: ["web01:eth1", "db01:eth1"]
+    subnet: "{{subnet}}"
+    addresses: { web01: "{{ip_a}}/24", db01: "{{ip_b}}/24" }</code></pre>
+<p><b>驗證規則</b>：id 與目錄名一致；modes 只能是 <code>guided</code>；params 只允許 <code>const</code>；<code>{{}}</code> 只能引用已定義的 param；checkpoint 的 node 必須存在於 topology；script 檔案必須存在且可執行；links 的 endpoints 介面不能是 eth0；每個 node 在同一 link 只能出現一次。違反任一條，<code>nsl serve</code> 拒絕啟動並列出所有錯誤。</p>
+<p><b>腳本契約</b>（同 DESIGN.md §3.5）：以 root 在指定 node 執行，param 以 <code>NSL_&lt;UPPER&gt;</code> 注入；setup 失敗 exit 非 0 則 attempt 進 <code>error</code>；checks 10 秒逾時視為失敗。</p>
+
+<h2><span class="n">06</span>Docker provider</h2>
+<p>實作 <code>runner.Runner</code>，全部行為由 Phase 0 實證（<code>docs/PHASE0-RESULTS.md</code>）。</p>
+<h4>Provision(spec)</h4>
+<ol>
+<li>建 <code>nsl-&lt;attempt&gt;-mgmt</code>（一般 bridge）與每條 link 一個 <code>nsl-&lt;attempt&gt;-&lt;n&gt;</code>（<code>--internal</code>，指定 subnet）。</li>
+<li>每個 node：<code>docker create</code>，image <code>nsl/node</code>，<code>--privileged --cgroupns=private</code>，tmpfs <code>/run</code>、<code>/run/lock</code>、<code>/tmp</code>，hostname = node 名，只接 mgmt；role 為 k3s 時再掛 volume <code>/var/lib/rancher/k3s/agent/containerd</code>。</li>
+<li>啟動後依 topology 的 links 順序 <code>network connect --ip</code>，保證 eth1、eth2 順序。</li>
+<li>輪詢 <code>systemctl is-system-running</code> 到 running / degraded（上限 30 秒）。</li>
+<li>exec <code>nsl-bootstrap</code>，環境變數 <code>NSL_NODE</code>、<code>NSL_ROLE</code>、<code>NSL_IFACES</code>（k3s 再加 token / server）。各 node 平行。</li>
+<li>exec <code>setup.sh</code>（以 root，注入 params）。失敗則整個 sandbox 銷毀並回傳錯誤訊息（含 stderr 最後 20 行）。</li>
+</ol>
+<h4>OpenTerminal(sb, node)</h4>
+<p><code>docker exec -it -u nsl -w /home/nsl</code> 執行 <code>bash -l</code>，環境 <code>TERM=xterm-256color</code>。回傳可讀寫的 PTY 與 resize 方法。每個 tab 一個 exec，關 tab 就結束該 exec。</p>
+<h4>Exec(sb, node, cmd, env, timeout)</h4>
+<p>無 TTY、以 root 執行，回傳 stdout、stderr、exit code。checker 與 recorder 都用它。</p>
+<h4>Destroy(sb)</h4>
+<p><code>rm -fv</code> 所有容器、<code>network rm</code> 所有網路。冪等：資源不存在不算錯。</p>
+<h4>GC()</h4>
+<p>列出所有帶 <code>nsl.managed=true</code> 的容器與網路並刪除。<code>nsl serve</code> 啟動時呼叫一次。</p>
+<h4>Health()</h4>
+<p>Docker daemon 可連、<code>nsl/node</code> image 存在、可用記憶體。UI 在 lab 列表頁顯示。</p>
+
+<h2><span class="n">07</span>Attempt 生命週期</h2>
+<pre><code>provisioning ──成功──▶ running ──全部 checkpoint 通過──▶ passed
+     │                    │
+     └─失敗──▶ error      ├─使用者放棄──▶ abandoned
+                          └─heartbeat 斷 15 分鐘 / 伺服器重啟──▶ expired</code></pre>
+<ul>
+<li>同一 user 同時只能有一個非終態 attempt；再建回 <code>409</code>。</li>
+<li><code>elapsed_ms</code> 只累計 running 期間，由伺服器計算；UI 的計時器以伺服器時間校正，不自己數。</li>
+<li>heartbeat：events WebSocket 連線存在即視為在線；所有連線斷開超過 15 分鐘 → expired。設定 <code>NSL_IDLE_TIMEOUT</code> 可改。</li>
+<li>進入任何終態都呼叫 <code>Destroy</code>，並在 UI 顯示結果頁。error 狀態的結果頁顯示失敗原因與「重試」。</li>
+<li>Attempt 的事件（狀態變更、checkpoint 變更、計時同步每 10 秒）透過 <code>attempt.Bus</code> 廣播到 events WebSocket。</li>
+</ul>
+
+<h2><span class="n">08</span>Checker</h2>
+<ul>
+<li>attempt 進 running 後啟動一個 goroutine，每 <code>NSL_CHECK_INTERVAL</code>（預設 5 秒）跑一輪：所有 checkpoint 平行 exec，逾時 10 秒。</li>
+<li>每輪結果寫 <code>checkpoint_runs</code>（<code>last_status</code>、<code>last_run_at</code>；首次通過寫 <code>first_passed_at</code>），有變化才廣播事件。</li>
+<li>同一輪全部通過 → 呼叫 attempt 的 <code>Finish(passed)</code>（P8）。</li>
+<li>Checker 執行期間若 attempt 已終態，立即停止。</li>
+</ul>
+
+<h2><span class="n">09</span>Recorder</h2>
+<ul>
+<li><b>指令歷史</b>：每 5 秒對每個 node exec <code>tail -c +&lt;offset&gt; /var/log/nsl/commands.jsonl</code>，逐行解析寫入 <code>command_log</code>，記住 offset。無法解析的行丟棄並計數。</li>
+<li><b>pty 錄影</b>：每個 terminal tab 一個 asciicast v2 檔（<code>&lt;data&gt;/recordings/&lt;attempt&gt;/&lt;node&gt;-&lt;tab&gt;.cast</code>），header 含 width / height / timestamp，輸出事件 <code>"o"</code>、輸入事件 <code>"i"</code>、resize 事件 <code>"r"</code>。寫入走 buffered writer，關 tab 或 attempt 終態時 flush。</li>
+<li><code>recordings</code> 表記路徑與起訖時間。</li>
+<li>結果頁的「指令數」= <code>command_log</code> 中該 attempt 的筆數。</li>
+</ul>
+
+<h2><span class="n">10</span>API</h2>
+<p>REST 皆為 JSON，錯誤格式 <code>{"error":{"code":"...","message":"..."}}</code>。所有 <code>{id}</code> 是 attempt id（ULID）。</p>
+<div class="tbl"><table>
+<tr><th>方法與路徑</th><th>用途</th><th>回應重點</th></tr>
+<tr><td><code>GET /api/health</code></td><td>Runner 健康</td><td>docker、image、記憶體</td></tr>
+<tr><td><code>GET /api/labs</code></td><td>Lab 列表</td><td>id、title、topic、level、modes、estimated_minutes</td></tr>
+<tr><td><code>GET /api/labs/{lab_id}</code></td><td>單一 lab</td><td>加 nodes（名稱、role）、visible checkpoints 的 title</td></tr>
+<tr><td><code>POST /api/attempts</code></td><td>開始練習 <code>{lab_id, mode}</code></td><td><code>201</code> attempt；<code>409</code> 已有進行中</td></tr>
+<tr><td><code>GET /api/attempts/current</code></td><td>目前非終態 attempt</td><td><code>204</code> 沒有</td></tr>
+<tr><td><code>GET /api/attempts/{id}</code></td><td>attempt 詳情</td><td>status、lab、ticket（已套 params）、nodes、checkpoints 狀態、elapsed_ms、server_time</td></tr>
+<tr><td><code>POST /api/attempts/{id}/abandon</code></td><td>放棄</td><td><code>200</code> 結果</td></tr>
+<tr><td><code>GET /api/attempts/{id}/result</code></td><td>結果頁資料</td><td>elapsed_ms、command_count、checkpoints（first_passed_at）、solution（雙語 markdown）</td></tr>
+<tr><td><code>WS /ws/attempts/{id}/events</code></td><td>事件流</td><td>JSON 訊息：<code>status</code>、<code>checkpoint</code>、<code>tick</code>、<code>error</code>；連線本身即 heartbeat</td></tr>
+<tr><td><code>WS /ws/attempts/{id}/term/{node}/{tab}</code></td><td>Terminal</td><td>binary frame = pty 位元組雙向；text frame = JSON 控制 <code>{"type":"resize","cols":..,"rows":..}</code></td></tr>
+</table></div>
+<p>WebSocket 的寫入有 buffer 上限（每連線 1 MB），超過則關閉連線並記 log，避免慢客戶端拖垮伺服器。</p>
+
+<h2><span class="n">11</span>Web UI</h2>
+<div class="tbl"><table>
+<tr><th>頁面</th><th>內容</th></tr>
+<tr><td><code>/</code> Lab 列表</td><td>卡片：title、topic、level、預估時間、「開始」按鈕（只有 guided）。頂部：Runner 健康、語言切換。若有進行中 attempt，顯示「繼續」並禁止開新的。</td></tr>
+<tr><td><code>/attempts/{id}</code> 練習頁</td><td>三欄：左「工單」面板（ticket、checkpoint 清單即時打勾、放棄按鈕）；中 terminal workspace（dockview，每個 node 預設一個 tab，可加 tab、可左右分割）；底部狀態列（計時器、attempt 狀態、各節點狀態）。provisioning 期間顯示進度文字（建網路 → 起節點 → bootstrap → setup）。</td></tr>
+<tr><td><code>/attempts/{id}/result</code> 結果頁</td><td>總時間、指令數、checkpoint 表（通過時間）、解答（markdown）、「回列表」。</td></tr>
+</table></div>
+<ul>
+<li>xterm.js：<code>addon-fit</code> 隨容器大小 resize 並送 resize 控制訊息；斷線顯示提示並自動重連（指數退避，上限 30 秒）。</li>
+<li>i18n：<code>i18next</code>，UI 字串 zh-TW 與 en 兩份 JSON，語言存 localStorage；內容的 title / ticket 由 API 依 <code>Accept-Language</code> 或 query <code>?lang=</code> 回傳對應語言。</li>
+<li>狀態管理 <code>zustand</code>；資料以 REST 初載、events WS 更新。</li>
+<li>不做的：主題切換、鍵盤快捷鍵、行動版排版（可用即可）。</li>
+</ul>
+
+<h2><span class="n">12</span>資料模型</h2>
+<p>照 DESIGN.md §5 建表，migration 用嵌入的 SQL 檔依序執行（<code>schema_migrations</code> 記版本）。Phase 1 差異：</p>
+<ul>
+<li><code>users</code> 預建一筆 <code>local</code>（role user，無密碼）。</li>
+<li><code>attempts.status</code> 的 enum：<code>provisioning | running | passed | abandoned | expired | error</code>（<code>submitted</code> 留 Phase 2）；加 <code>error_message</code> 欄位。</li>
+<li>id 一律 ULID 字串。時間欄位存 UTC RFC 3339。</li>
+</ul>
+
+<h2><span class="n">13</span>工程基線</h2>
+<div class="tbl"><table>
+<tr><th>項目</th><th>規定</th></tr>
+<tr><td>版本</td><td>Go 1.25、Node 22、React 19、TypeScript 5、Vite 7</td></tr>
+<tr><td>Makefile</td><td><code>build</code>、<code>dev</code>（Go + Vite 同時起）、<code>lint</code>、<code>test</code>、<code>test-integration</code>、<code>image</code>（建 nsl/node）、<code>clean</code></td></tr>
+<tr><td>設定</td><td><code>NSL_LISTEN</code>（預設 <code>:8080</code>）、<code>NSL_DATA_DIR</code>（sqlite、recordings）、<code>NSL_CONTENT_DIR</code>、<code>NSL_NODE_IMAGE</code>（預設 <code>nsl/node</code>）、<code>NSL_IDLE_TIMEOUT</code>、<code>NSL_CHECK_INTERVAL</code>、<code>NSL_LOG_LEVEL</code></td></tr>
+<tr><td>Log</td><td><code>log/slog</code>，JSON 到 stdout，attempt id 進每條相關 log</td></tr>
+<tr><td>測試</td><td>純邏輯單元測試（content 驗證、狀態機、param 模板、asciicast 格式）；<code>provider/docker</code> 與 attempt 端到端用 build tag <code>integration</code>；前端 vitest 只測 store 與 i18n，不做 UI 快照</td></tr>
+<tr><td>錯誤</td><td>一律 <code>fmt.Errorf("...: %w", err)</code> 包裝；API 邊界轉成 error code</td></tr>
+<tr><td>註解與風格</td><td>依 <code>.claude/CLAUDE.md</code>：標準 lint 預設、不寫無謂註解</td></tr>
+</table></div>
+
+<h2><span class="n">14</span>Task 拆分</h2>
+<p>批准後由 planner 依此拆成 GitHub issue，每個 task 一個 PR、一次 Opus 執行、Haiku 審查。順序即依賴順序，同一列可平行。</p>
+<div class="tbl"><table>
+<tr><th>#</th><th>Task</th><th>驗收</th></tr>
+<tr><td>T1</td><td>Repo 骨架：Go module、cmd/nsl、Makefile、Vite 專案、CI、lint 設定、LICENSE、branch protection</td><td>CI 綠燈；<code>make build</code> 出 binary（前端空殼）</td></tr>
+<tr><td>T2</td><td><code>content</code>：型別、載入、驗證、param 模板；fixture lab 檔案</td><td>單元測試覆蓋 §05 每條驗證規則；fixture lab 載入成功</td></tr>
+<tr><td>T3</td><td><code>store</code>：schema、migration、repositories</td><td>單元測試用暫存 DB 跑 migration 與 CRUD</td></tr>
+<tr><td>T4</td><td><code>runner</code> 介面 + <code>provider/docker</code></td><td>整合測試：provision fixture lab → exec 驗證 eth1 位址 → open pty 跑 <code>echo</code> → destroy 無殘留；GC 清得掉手動留下的 label 資源</td></tr>
+<tr><td>T5</td><td><code>attempt</code>：狀態機、計時、heartbeat、逾時、Bus、啟動 GC</td><td>單元測試狀態轉移與計時（用假 clock、假 Runner）</td></tr>
+<tr><td>T6</td><td><code>checker</code> 與 <code>recorder</code></td><td>整合測試：fixture lab 中用 exec 執行解答，checker 在兩輪內回報全過；command_log 有解答指令；cast 檔可被 asciinema 格式驗證</td></tr>
+<tr><td>T7</td><td><code>api</code>：REST、events WS、terminal WS、embed</td><td>httptest 覆蓋每個端點的成功與錯誤碼；WS 用 client 測 resize 與 backpressure 關閉</td></tr>
+<tr><td>T8</td><td>Web：app 殼、路由、i18n、lab 列表、health</td><td>vitest 測 i18n 與 store；手動：列表顯示 fixture lab</td></tr>
+<tr><td>T9</td><td>Web：練習頁（terminal workspace、工單面板、狀態列、provisioning 進度、重連）</td><td>手動：兩節點 terminal 可操作、resize 正確、checkpoint 即時打勾</td></tr>
+<tr><td>T10</td><td>Web：結果頁、放棄流程；端到端手動驗收 §01；README 快速開始</td><td>§01 六條全部成立，由 planner 實機驗證並記錄</td></tr>
+</table></div>
+
+<h2><span class="n">15</span>風險</h2>
+<ul>
+<li><b>WebSocket 與 pty 的邊界情況</b>（貼上大量文字、快速 resize、瀏覽器分頁休眠）。T7 的 backpressure 與 T9 的重連是對策；不追求完美，能不當機即可。</li>
+<li><b>dockview 的學習成本</b>。若 T9 在半天內做不出分割與 tab，退回單純的 tab 列（不分割），分割留 Phase 3。</li>
+<li><b>docker/docker client 版本</b>。Docker Engine 29 的 API 版本較新，client 固定用 negotiate。</li>
+<li><b>Opus 的 task 若跨模組</b>會膨脹。T4、T7 最大，必要時再各拆兩半。</li>
+</ul>
+
+<div class="approve">
+<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
+<ol>
+<li>P1 到 P9 有沒有要改的？P3 license 請明確說要或不要。</li>
+<li>§02 的範圍切法有沒有要移進或移出的？</li>
+<li>批准後我開 issue、從 T1 開始派工，每個 task 的 PR 開好會通知你。</li>
+</ol>
+</div>
+</div>
