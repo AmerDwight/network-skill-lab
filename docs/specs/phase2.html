@@ -71,10 +71,10 @@ a{color:var(--accent)}
 <h1>Phase 2 內容系統</h1>
 <div class="meta">
   <span>類型 <b>正式開發（三層模型）</b></span>
-  <span>版本 <b>v1 草案</b></span>
-  <span>日期 <b>2026-09-23</b></span>
+  <span>版本 <b>v1</b></span>
+  <span>日期 <b>2026-09-23，同日批准</b></span>
   <span>撰寫 <b>Fable 5.1（planner）</b></span>
-  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+  <span>狀態 <b><span class="tag risk">已批准</span></b></span>
 </div>
 <p class="lede">Phase 1 證明引擎能跑完一題。Phase 2 把引擎變成「不改程式碼就能長內容」的系統：文件、學習路徑、三種模式、隨機化參數、自檢、lint，以及五個各自驗證一個擴充點的 fixture lab。這個 phase 的產品是 DESIGN.md §3.9 那張擴充點表，lab 只是證據。</p>
 
@@ -116,7 +116,7 @@ a{color:var(--accent)}
 </table></div>
 
 <h2><span class="n">03</span>待批的提案</h2>
-<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+<p>以下十項於 2026-09-23 隨 spec 一併採納。</p>
 
 <div class="decision"><b class="q">P1 precheck 失敗的重生 = 銷毀沙箱、重新選 case 與 params、重新 provision，最多 3 次</b>
 <div class="why">理由：D10 原文。Ubuntu 雙節點 provision 只要 2.7 秒，重來比「原地重跑 setup」簡單且乾淨；k3s lab 若 precheck 失敗代價較高，但 k3s 題的 params 通常不影響拓樸，作者應讓 precheck 幾乎不會失敗。</div></div>
@@ -315,11 +315,7 @@ content/tracks/network-basics.yaml         # DESIGN.md §3.7；step 的 doc / la
 </ul>
 
 <div class="approve">
-<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
-<ol>
-<li>P1 到 P10 有沒有要改的？</li>
-<li>§02 範圍與 P5 的五個 lab 主題有沒有要換的？例如你更想要 netplan 或 iptables 的題。</li>
-<li>批准後我開 issue，T1、T2 平行開工。</li>
-</ol>
+<h3 style="margin-top:0">批准紀錄</h3>
+<p>2026-09-23 使用者批准：P1 到 P10 全採納，五個 fixture lab 主題維持。Task 以 GitHub issue 追蹤。</p>
 </div>
 </div>
