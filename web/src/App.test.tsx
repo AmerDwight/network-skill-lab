@@ -11,13 +11,16 @@ vi.mock("./api/client", async (importOriginal) => {
   return {
     ApiError: actual.ApiError,
     getHealth: vi.fn(),
+    listTopics: vi.fn(),
     listLabs: vi.fn(),
+    getLab: vi.fn(),
     getCurrentAttempt: vi.fn(),
     createAttempt: vi.fn(),
   };
 });
 
 const getHealth = vi.mocked(client.getHealth);
+const listTopics = vi.mocked(client.listTopics);
 const listLabs = vi.mocked(client.listLabs);
 const getCurrentAttempt = vi.mocked(client.getCurrentAttempt);
 
@@ -36,6 +39,7 @@ describe("App", () => {
       mem_available_mb: 2048,
       error: "",
     });
+    listTopics.mockResolvedValue([]);
     listLabs.mockResolvedValue([]);
     getCurrentAttempt.mockResolvedValue(null);
 
@@ -49,6 +53,7 @@ describe("App", () => {
   it("shows an error state when the api is not there", async () => {
     const error = new ApiError(404, "not_found", "no route for GET /api/labs");
     getHealth.mockRejectedValue(error);
+    listTopics.mockRejectedValue(error);
     listLabs.mockRejectedValue(error);
     getCurrentAttempt.mockRejectedValue(error);
 

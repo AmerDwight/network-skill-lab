@@ -2,26 +2,14 @@ import { createServer } from "node:http";
 
 import { WebSocketServer } from "ws";
 
+import { docs, health, labs, topics, tracks } from "./fixtures.mjs";
+
 const port = 18090;
 const startedAt = Date.now();
-const lab = {
-  id: "net-ip-01-link-down",
-  title: "Server lost connectivity",
-  topic: "net/ip",
-  level: 2,
-  modes: ["guided"],
-  estimated_minutes: 10,
-};
-const nodes = [
-  { name: "host", role: "linux" },
-  { name: "gw", role: "router" },
-];
-const checkpoints = [
-  ["link-up", "The link is up"],
-  ["ping-ok", "The gateway answers"],
-].map(([id, title]) => ({
-  id,
-  title,
+const lab = labs[0];
+const summary = ({ nodes, checkpoints, topic_title, ...rest }) => rest;
+const checkpoints = lab.checkpoints.map((checkpoint) => ({
+  ...checkpoint,
   status: "pending",
   first_passed_at: null,
 }));
@@ -38,9 +26,9 @@ function attempt(id) {
     mode: "guided",
     status: "running",
     error_message: "",
-    lab,
+    lab: summary(lab),
     ticket: "The server cannot reach the gateway.\nFind out why and fix it.",
-    nodes,
+    nodes: lab.nodes,
     checkpoints,
     elapsed_ms: Date.now() - startedAt,
     started_at: new Date(startedAt).toISOString(),
@@ -54,7 +42,7 @@ function result(id) {
   return {
     attempt_id: id,
     status: "passed",
-    lab,
+    lab: summary(lab),
     elapsed_ms: 254000,
     command_count: 17,
     checkpoints: checkpoints.map((checkpoint, index) => ({
@@ -66,26 +54,177 @@ function result(id) {
   };
 }
 
-const abandoned = (id) => ({ ...attempt(id), status: "abandoned" });
+const inTopic = (topic, selected) =>
+  selected === null || topic === selected || topic.startsWith(`${selected}/`);
 
-const routes = [
-  [/^\/api\/attempts\/([^/]+)$/, attempt],
-  [/^\/api\/attempts\/([^/]+)\/result$/, result],
-  [/^\/api\/attempts\/([^/]+)\/abandon$/, abandoned],
-];
+const localized = (value, lang) => value[lang] ?? value.en;
 
-const server = createServer((request, response) => {
-  const path = new URL(request.url, "http://localhost").pathname;
-  response.setHeader("Content-Type", "application/json");
-  for (const [pattern, body] of routes) {
-    const match = pattern.exec(path);
-    if (match) {
-      response.end(JSON.stringify(body(match[1])));
-      return;
+function docPayload(doc, lang) {
+  return {
+    id: doc.id,
+    topic: doc.topic,
+    title: localized(doc.title, lang),
+    body: localized(doc.body, lang),
+    completed: doc.completed,
+  };
+}
+
+function markRead(body) {
+  if (body.kind !== "doc") {
+    return {
+      status: 400,
+      body: { error: { code: "invalid_kind", message: body.kind } },
+    };
+  }
+  const doc = docs.find((candidate) => candidate.id === body.ref);
+  if (doc === undefined) {
+    return {
+      status: 404,
+      body: { error: { code: "not_found", message: body.ref } },
+    };
+  }
+  doc.completed = true;
+  for (const track of tracks) {
+    for (const step of track.steps) {
+      if (step.kind === "doc" && step.ref === doc.id) {
+        step.completed = true;
+      }
     }
   }
-  response.writeHead(404);
-  response.end(JSON.stringify({ error: { code: "not_found", message: path } }));
+  return { status: 204 };
+}
+
+function found(value, id) {
+  if (value === undefined) {
+    return { status: 404, body: { error: { code: "not_found", message: id } } };
+  }
+  return { body: value };
+}
+
+const routes = [
+  ["GET", /^\/api\/health$/, () => ({ body: health })],
+  ["GET", /^\/api\/topics$/, () => ({ body: topics })],
+  [
+    "GET",
+    /^\/api\/labs$/,
+    (match, url) => ({
+      body: labs
+        .filter((item) => inTopic(item.topic, url.searchParams.get("topic")))
+        .map(summary),
+    }),
+  ],
+  [
+    "GET",
+    /^\/api\/labs\/([^/]+)$/,
+    (match) => {
+      const id = decodeURIComponent(match[1]);
+      return found(
+        labs.find((item) => item.id === id),
+        id,
+      );
+    },
+  ],
+  [
+    "GET",
+    /^\/api\/docs$/,
+    (match, url) => ({
+      body: docs.map((doc) => ({
+        id: doc.id,
+        topic: doc.topic,
+        title: localized(doc.title, url.searchParams.get("lang") ?? "en"),
+      })),
+    }),
+  ],
+  [
+    "GET",
+    /^\/api\/docs\/(.+)$/,
+    (match, url) => {
+      const id = decodeURIComponent(match[1]);
+      const doc = docs.find((candidate) => candidate.id === id);
+      return doc === undefined
+        ? found(undefined, id)
+        : { body: docPayload(doc, url.searchParams.get("lang") ?? "en") };
+    },
+  ],
+  [
+    "GET",
+    /^\/api\/tracks$/,
+    () => ({
+      body: tracks.map((track) => ({
+        id: track.id,
+        title: track.title,
+        steps: track.steps.length,
+        completed: track.steps.filter((step) => step.completed).length,
+      })),
+    }),
+  ],
+  [
+    "GET",
+    /^\/api\/tracks\/([^/]+)$/,
+    (match) => {
+      const id = decodeURIComponent(match[1]);
+      return found(
+        tracks.find((track) => track.id === id),
+        id,
+      );
+    },
+  ],
+  ["POST", /^\/api\/progress$/, (match, url, body) => markRead(body)],
+  ["GET", /^\/api\/attempts\/current$/, () => ({ status: 204 })],
+  ["POST", /^\/api\/attempts$/, () => ({ body: attempt("01JMOCKATTEMPT") })],
+  [
+    "GET",
+    /^\/api\/attempts\/([^/]+)$/,
+    (match) => ({ body: attempt(match[1]) }),
+  ],
+  [
+    "GET",
+    /^\/api\/attempts\/([^/]+)\/result$/,
+    (match) => ({ body: result(match[1]) }),
+  ],
+  [
+    "POST",
+    /^\/api\/attempts\/([^/]+)\/abandon$/,
+    (match) => ({ body: { ...attempt(match[1]), status: "abandoned" } }),
+  ],
+];
+
+async function readBody(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+  if (chunks.length === 0) {
+    return null;
+  }
+  return JSON.parse(Buffer.concat(chunks).toString());
+}
+
+const server = createServer((request, response) => {
+  const url = new URL(request.url, "http://localhost");
+  void readBody(request).then((body) => {
+    for (const [method, pattern, handler] of routes) {
+      const match = pattern.exec(url.pathname);
+      if (match === null || method !== request.method) {
+        continue;
+      }
+      const reply = handler(match, url, body);
+      if (reply.status === 204) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      response.writeHead(reply.status ?? 200, {
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(reply.body));
+      return;
+    }
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(
+      JSON.stringify({ error: { code: "not_found", message: url.pathname } }),
+    );
+  });
 });
 
 const sockets = new WebSocketServer({ noServer: true });

@@ -8,6 +8,7 @@ import type {
   AttemptStatus,
   ProvisioningStep,
 } from "../api/types";
+import { messageOf } from "../lib/errors";
 import type { ConnectionState } from "../ws/socket";
 import type { TerminalState } from "../ws/terminal";
 
@@ -67,10 +68,6 @@ export const initialState = {
   syncedAt: null,
   displayedMs: 0,
 };
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function displayFor(
   status: AttemptStatus | null,

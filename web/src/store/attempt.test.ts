@@ -36,6 +36,8 @@ const attempt: Attempt = {
     level: 2,
     modes: ["guided"],
     estimated_minutes: 10,
+    related_docs: [],
+    has_hidden_checkpoints: false,
   },
   ticket: "the server cannot reach the gateway",
   nodes: [

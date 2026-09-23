@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as client from "../api/client";
 import { ApiError } from "../api/client";
-import type { Attempt, Health, LabSummary } from "../api/types";
+import type {
+  Attempt,
+  Health,
+  LabDetail,
+  LabSummary,
+  TopicNode,
+} from "../api/types";
 
 import { initialState, useAppStore } from "./app";
 
@@ -11,14 +17,18 @@ vi.mock("../api/client", async (importOriginal) => {
   return {
     ApiError: actual.ApiError,
     getHealth: vi.fn(),
+    listTopics: vi.fn(),
     listLabs: vi.fn(),
+    getLab: vi.fn(),
     getCurrentAttempt: vi.fn(),
     createAttempt: vi.fn(),
   };
 });
 
 const getHealth = vi.mocked(client.getHealth);
+const listTopics = vi.mocked(client.listTopics);
 const listLabs = vi.mocked(client.listLabs);
+const getLab = vi.mocked(client.getLab);
 const getCurrentAttempt = vi.mocked(client.getCurrentAttempt);
 const createAttempt = vi.mocked(client.createAttempt);
 
@@ -31,13 +41,32 @@ const health: Health = {
   error: "",
 };
 
+const topics: TopicNode[] = [
+  {
+    id: "net",
+    title: "Networking",
+    labs: 1,
+    docs: 1,
+    children: [{ id: "net/ip", title: "IP", labs: 1, docs: 1, children: [] }],
+  },
+];
+
 const lab: LabSummary = {
   id: "net-ip-01-link-down",
   title: "Server lost connectivity",
   topic: "net/ip",
   level: 2,
-  modes: ["guided"],
+  modes: ["tutorial", "guided", "real"],
   estimated_minutes: 10,
+  related_docs: [{ id: "net/ip/guide", title: "IP guide" }],
+  has_hidden_checkpoints: false,
+};
+
+const labDetail: LabDetail = {
+  ...lab,
+  nodes: [{ name: "host", role: "linux" }],
+  checkpoints: [{ id: "link-up", title: "The link is up" }],
+  topic_title: "IP",
 };
 
 const attempt: Attempt = {
@@ -83,16 +112,46 @@ describe("loadHealth", () => {
   });
 });
 
+describe("loadTopics", () => {
+  it("stores the topic tree", async () => {
+    listTopics.mockResolvedValue(topics);
+
+    await useAppStore.getState().loadTopics();
+
+    expect(useAppStore.getState().topics).toEqual({ status: "ok", topics });
+  });
+
+  it("stores the error message", async () => {
+    listTopics.mockRejectedValue(new ApiError(404, "not_found", "no route"));
+
+    await useAppStore.getState().loadTopics();
+
+    expect(useAppStore.getState().topics).toEqual({
+      status: "error",
+      message: "no route",
+    });
+  });
+});
+
 describe("loadLabs", () => {
   it("stores the lab list", async () => {
     listLabs.mockResolvedValue([lab]);
 
     await useAppStore.getState().loadLabs();
 
+    expect(listLabs).toHaveBeenCalledWith(undefined);
     expect(useAppStore.getState().labs).toEqual({
       status: "ok",
       labs: [lab],
     });
+  });
+
+  it("passes the selected topic on", async () => {
+    listLabs.mockResolvedValue([lab]);
+
+    await useAppStore.getState().loadLabs("net/ip");
+
+    expect(listLabs).toHaveBeenCalledWith("net/ip");
   });
 
   it("stores the error message", async () => {
@@ -103,6 +162,31 @@ describe("loadLabs", () => {
     expect(useAppStore.getState().labs).toEqual({
       status: "error",
       message: "no route",
+    });
+  });
+});
+
+describe("loadLab", () => {
+  it("stores the lab detail", async () => {
+    getLab.mockResolvedValue(labDetail);
+
+    await useAppStore.getState().loadLab(lab.id);
+
+    expect(getLab).toHaveBeenCalledWith(lab.id);
+    expect(useAppStore.getState().lab).toEqual({
+      status: "ok",
+      lab: labDetail,
+    });
+  });
+
+  it("stores the error message", async () => {
+    getLab.mockRejectedValue(new ApiError(404, "not_found", "no lab"));
+
+    await useAppStore.getState().loadLab(lab.id);
+
+    expect(useAppStore.getState().lab).toEqual({
+      status: "error",
+      message: "no lab",
     });
   });
 });
@@ -141,12 +225,12 @@ describe("startAttempt", () => {
   it("returns and stores the created attempt", async () => {
     createAttempt.mockResolvedValue(attempt);
 
-    await expect(useAppStore.getState().startAttempt(lab.id)).resolves.toEqual(
-      attempt,
-    );
-    expect(createAttempt).toHaveBeenCalledWith(lab.id);
+    await expect(
+      useAppStore.getState().startAttempt(lab.id, "real"),
+    ).resolves.toEqual(attempt);
+    expect(createAttempt).toHaveBeenCalledWith(lab.id, "real");
     expect(useAppStore.getState().attempt).toEqual(attempt);
-    expect(useAppStore.getState().startingLabId).toBeNull();
+    expect(useAppStore.getState().starting).toBeNull();
   });
 
   it("loads the running attempt on 409", async () => {
@@ -156,7 +240,7 @@ describe("startAttempt", () => {
     getCurrentAttempt.mockResolvedValue(attempt);
 
     await expect(
-      useAppStore.getState().startAttempt(lab.id),
+      useAppStore.getState().startAttempt(lab.id, "guided"),
     ).resolves.toBeNull();
     expect(getCurrentAttempt).toHaveBeenCalledOnce();
     expect(useAppStore.getState().attempt).toEqual(attempt);
@@ -167,23 +251,22 @@ describe("startAttempt", () => {
     createAttempt.mockRejectedValue(new ApiError(404, "not_found", "no route"));
 
     await expect(
-      useAppStore.getState().startAttempt(lab.id),
+      useAppStore.getState().startAttempt(lab.id, "guided"),
     ).resolves.toBeNull();
     expect(getCurrentAttempt).not.toHaveBeenCalled();
     expect(useAppStore.getState().attemptError).toBe("no route");
-    expect(useAppStore.getState().startingLabId).toBeNull();
+    expect(useAppStore.getState().starting).toBeNull();
   });
 });
 
 describe("setLanguage", () => {
-  it("switches the language and reloads the labs", async () => {
-    listLabs.mockResolvedValue([lab]);
-
+  it("switches the language", async () => {
     await useAppStore.getState().setLanguage("en");
 
     expect(useAppStore.getState().language).toBe("en");
-    expect(listLabs).toHaveBeenCalledOnce();
 
     await useAppStore.getState().setLanguage("zh-TW");
+
+    expect(useAppStore.getState().language).toBe("zh-TW");
   });
 });
