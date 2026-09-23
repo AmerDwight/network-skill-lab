@@ -1,0 +1,43 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.17kB done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/ubuntu:24.04
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/5] FROM docker.io/library/ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
+#4 resolve docker.io/library/ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3 0.1s done
+#4 DONE 0.1s
+
+#5 [internal] load build context
+#5 transferring context: 820B done
+#5 DONE 0.0s
+
+#6 [2/5] RUN rm -f /etc/dpkg/dpkg.cfg.d/excludes  && echo 'wireshark-common wireshark-common/install-setuid boolean false' | debconf-set-selections  && apt-get update  && apt-get install -y --no-install-recommends       systemd systemd-sysv systemd-resolved dbus kmod udev locales tzdata       iproute2 net-tools ethtool iputils-ping iputils-arping iputils-tracepath traceroute mtr-tiny       netcat-openbsd socat iperf3 telnet nmap arp-scan       bind9-dnsutils       tcpdump tshark iftop conntrack       iptables nftables ufw       netplan.io network-manager isc-dhcp-client openssh-server chrony nginx rsyslog       snmp snmpd snmp-mibs-downloader lldpd snmptrapd       curl wget openssl ca-certificates rsync       procps psmisc lsof strace htop sysstat util-linux       vim nano less jq tmux tree git bash-completion man-db file unzip sudo cron zstd  && apt-get clean && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [3/5] RUN set -eux;     curl -fsSL -o /usr/local/bin/k3s "https://github.com/k3s-io/k3s/releases/download/v1.36.4+k3s1/k3s";     chmod 0755 /usr/local/bin/k3s;     for t in kubectl crictl ctr; do ln -sf k3s /usr/local/bin/$t; done;     mkdir -p /usr/share/nsl;     curl -fsSL -o /usr/share/nsl/k3s-airgap-images-amd64.tar.zst       "https://github.com/k3s-io/k3s/releases/download/v1.36.4+k3s1/k3s-airgap-images-amd64.tar.zst";     curl -fsSL "https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 linux-amd64/helm;     curl -fsSL "https://github.com/derailed/k9s/releases/download/v0.51.0/k9s_Linux_amd64.tar.gz" | tar -xz -C /usr/local/bin k9s;     curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin kustomize;     curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64";     chmod 0755 /usr/local/bin/yq;     k3s ctr --help >/dev/null 2>&1
+#7 CACHED
+
+#8 [4/5] COPY rootfs/ /
+#8 CACHED
+
+#9 [5/5] RUN set -eux;     mkdir -p /var/log/nsl /etc/rancher/k3s; chmod 1777 /var/log/nsl; touch /var/log/nsl/commands.jsonl; chmod 0666 /var/log/nsl/commands.jsonl;     useradd -m -s /bin/bash -G sudo nsl;     echo '. /etc/profile.d/nsl-history.sh' >> /etc/bash.bashrc;     systemctl mask systemd-modules-load.service sys-kernel-debug.mount sys-kernel-config.mount sys-kernel-tracing.mount                    systemd-hwdb-update.service systemd-remount-fs.service getty.target console-getty.service                    systemd-logind.service ufw.service;     systemctl enable systemd-networkd systemd-resolved ssh rsyslog cron chrony;     systemctl disable NetworkManager nginx snmpd lldpd snmptrapd;     ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf.resolved
+#9 CACHED
+
+#10 exporting to image
+#10 exporting layers done
+#10 exporting manifest sha256:1cf0aefb285c7675be60409f5ab655c1dc06b408bd9b428ee6f5c307e0b97036 done
+#10 exporting config sha256:4bf60584137debb2001c2369a06f3d193cd2b9f41f5d922360dbfc632464d82a done
+#10 exporting attestation manifest sha256:e0ab1131732da1abf0ae520bb79b052a0c918d56537e35f21f95e2f4c3d99f59 0.1s done
+#10 exporting manifest list sha256:20100744af82eefd57f489b003d982b294be01acbff35d786d63c992b0efc288
+#10 exporting manifest list sha256:20100744af82eefd57f489b003d982b294be01acbff35d786d63c992b0efc288 0.0s done
+#10 naming to docker.io/nsl/node:latest done
+#10 unpacking to docker.io/nsl/node:latest 0.0s done
+#10 DONE 0.2s

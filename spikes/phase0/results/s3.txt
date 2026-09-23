@@ -1,0 +1,68 @@
+
+== topology (both networks internal: no internet)
+PASS  systemd up on nsl-s3-k3s01
+PASS  systemd up on nsl-s3-k3s02
+MEASURE systemd_wait_seconds = 2.22
+MEASURE bootstrap_seconds = 0.88
+
+== cluster comes up
+PASS  two nodes Ready
+MEASURE cold_start_to_2_ready_seconds = 17.19
+k3s01   Ready   control-plane   8s    v1.36.4+k3s1   10.0.8.10   <none>   Ubuntu 24.04.5 LTS   6.18.33.2-microsoft-standard-WSL2 (amd64)   containerd://2.3.4-k3s1.36
+k3s02   Ready   <none>          1s    v1.36.4+k3s1   10.0.8.20   <none>   Ubuntu 24.04.5 LTS   6.18.33.2-microsoft-standard-WSL2 (amd64)   containerd://2.3.4-k3s1.36
+PASS  node k3s01 internal IP is eth1
+MEASURE system_pods_settled_seconds = 42.67
+kube-system   coredns-54996dc9b4-q69mv                  1/1   Running   0     27s   10.42.0.4   k3s01   <none>   <none>
+kube-system   helm-install-traefik-crd-tkdxn            1/1   Running   0     26s   10.42.1.5   k3s02   <none>   <none>
+kube-system   helm-install-traefik-q5dmq                1/1   Running   0     25s   10.42.1.4   k3s02   <none>   <none>
+kube-system   local-path-provisioner-77b9867795-6fxnq   1/1   Running   0     27s   10.42.0.3   k3s01   <none>   <none>
+kube-system   metrics-server-6dc596dfb8-7pwv6           0/1   Running   0     27s   10.42.0.2   k3s01   <none>   <none>
+PASS  all system pods Running/Completed
+
+== R3 cross-node pod traffic over flannel
+PASS  pods running on distinct nodes
+p1 on k3s01 / p2 on k3s02 ip 10.42.1.6
+PASS  p1 pings p2 across nodes
+PASS  p1 resolves kubernetes.default.svc.cluster.local via coredns: Address: 10.43.0.1
+PASS  p1 resolves via coredns (wget probe): wget: note: TLS certificate validation not implemented
+wget: server returned error: HTTP/1.1 401 Unauthorized
+PASS  agent host reaches p2 pod directly
+PASS  server host reaches p2 pod via vxlan
+PASS  vxlan device flannel.1 exists on agent
+
+== k3s server timeline (seconds since container boot)
+  [ 5285.477186] k3s01 systemd[1]: Starting k3s.service - Lightweight Kubernetes (server)...
+  [ 5285.585774] time="2026-09-21T02:08:50Z" level=info msg="Starting k3s v1.36.4+k3s1 (4dedb15b)"
+  [ 5287.349643] time="2026-09-21T02:08:52Z" level=info msg="Wrote kubeconfig /etc/rancher/k3s/k3s.yaml"
+  [ 5288.337287] time="2026-09-21T02:08:53Z" level=info msg="Importing images from /var/lib/rancher/k3s/agent/images/k3s-airgap-images-amd64.tar.zst"
+  [ 5291.327299] time="2026-09-21T02:08:56Z" level=info msg="k3s is up and running"
+  [ 5293.264263] time="2026-09-21T02:08:58Z" level=info msg="Starting k3s.cattle.io/v1, Kind=Addon controller"
+  agent: [ 5285.905939] k3s02 systemd[1]: Starting k3s-agent.service - Lightweight Kubernetes (agent)...
+  agent: [ 5286.063338] time="2026-09-21T02:08:51Z" level=info msg="Starting k3s agent v1.36.4+k3s1 (4dedb15b)"
+  agent: [ 5297.535691] time="2026-09-21T02:09:02Z" level=info msg="Importing images from /var/lib/rancher/k3s/agent/images/k3s-airgap-images-amd64.tar.zst"
+
+== offline proof
+PASS  server imported airgap images
+PASS  agent imported airgap images
+PASS  no successful registry pull on server
+PASS  no successful registry pull on agent
+transient pull attempts before import finished: server=0 agent=8
+PASS  images in containerd on agent: 8
+PASS  k3s data dir came pre-extracted from image
+PASS  containerd snapshotter in use: snapshotter = "overlayfs"
+
+== tools
+PASS  kubectl on server (KUBECONFIG via profile)
+PASS  crictl ps on agent
+PASS  ctr images on agent
+PASS  helm version
+PASS  k9s binary runs
+
+== R5 resources (after 30s settle)
+nsl-s3-k3s01 cpu=6.49% mem=705.3MiB / 5.788GiB
+nsl-s3-k3s02 cpu=1.53% mem=281.2MiB / 5.788GiB
+MEASURE server_mem_MB = 706MiB
+MEASURE agent_mem_MB = 281.5MiB
+MEASURE host_free_MB = 3577
+
+RESULT s3 PASS (24 checks)

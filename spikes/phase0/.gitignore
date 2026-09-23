@@ -1,0 +1,4 @@
+results/*
+!results/s?.txt
+!results/s1-build.log
+!results/*-bootstrap-*.log

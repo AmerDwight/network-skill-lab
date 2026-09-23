@@ -1,0 +1,292 @@
+<title>Phase 0 風險驗證</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8;--surface:#ffffff;--ink:#17222b;--muted:#5b6b76;--line:#d9e0e4;
+  --accent:#0f6e6c;--accent-ink:#ffffff;--accent-soft:#dff0ee;
+  --warn-soft:#fbeedb;--warn:#8a5a0b;--pending-soft:#e9e6f7;--pending:#4d3f9e;
+  --code-bg:#eef2f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+    --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+    --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+    --code-bg:#0b1014;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+  --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+  --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+  --code-bg:#0b1014;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;}
+.wrap{max-width:860px;margin:0 auto;padding-block:40px 80px;padding-inline:20px;}
+h1,h2,h3{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:30px;font-weight:700}
+h2{font-size:20px;font-weight:700;margin-top:56px;padding-bottom:8px;border-bottom:2px solid var(--line);display:flex;align-items:baseline;gap:12px}
+h2 .n{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);letter-spacing:.08em}
+h3{font-size:16px;font-weight:700;margin-top:28px}
+p{margin:12px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;color:var(--muted);font-size:13px;margin-top:14px}
+.meta b{color:var(--ink);font-weight:500}
+.lede{font-size:16px;color:var(--muted);margin-top:18px;max-width:64ch}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px}
+code{background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;line-height:1.55;margin:12px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+.tbl{overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;background:var(--surface)}
+td:first-child{white-space:nowrap}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:2px 8px;border-radius:999px;letter-spacing:.04em;vertical-align:middle}
+.tag.risk{background:var(--accent-soft);color:var(--accent)}
+.tag.pending{background:var(--pending-soft);color:var(--pending)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.spike{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-top:22px}
+.spike header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;margin-bottom:6px}
+.spike header h3{margin:0}
+.spike header .id{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-weight:500}
+.spike .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;margin-top:10px}
+.spike .grid>div>b{display:block;font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;margin-bottom:2px}
+@media (max-width:640px){.spike .grid{grid-template-columns:1fr}}
+.decision{border-left:3px solid var(--pending);padding:2px 0 2px 16px;margin:18px 0}
+.decision b.q{display:block}
+.decision .why{color:var(--muted);font-size:14px}
+.callout{background:var(--accent-soft);border-radius:8px;padding:16px 20px;margin:20px 0}
+.callout p{margin:6px 0}
+.approve{margin-top:48px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px}
+.approve ol li{margin:6px 0}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--surface)}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">network-skill-lab · spec</div>
+<h1>Phase 0 風險驗證</h1>
+<div class="meta">
+  <span>類型 <b>spike</b></span>
+  <span>版本 <b>v1</b></span>
+  <span>日期 <b>2026-09-18，2026-09-21 批准</b></span>
+  <span>撰寫 <b>Fable 5.1（planner）</b></span>
+  <span>狀態 <b><span class="tag risk">已批准</span></b></span>
+</div>
+<p class="lede">用五支拋棄式腳本回答 DESIGN.md §7 列出的五個技術未知數。答案決定 Phase 1 的 Docker provider 怎麼寫，以及 nsl/node image 長什麼樣。這個 phase 不寫任何正式程式碼。</p>
+
+<h2><span class="n">01</span>目標與範圍</h2>
+<p><b>目標。</b>R1 到 R5 每一項都有實測結果與數字，回寫 DESIGN.md §7；並確定方案 A（Docker 配 IP 後由 networkd 接管）可行，或明確判定退到方案 B。</p>
+<div class="tbl"><table>
+<tr><th>在範圍內</th><th>不在範圍內</th></tr>
+<tr><td>
+<ul>
+<li>五支 bash 驗證腳本，S0 到 S4</li>
+<li>正式的 <code>images/node/Dockerfile</code>（S1 產物，之後直接沿用）</li>
+<li>量測數據與結論文件 <code>docs/PHASE0-RESULTS.md</code></li>
+<li>DESIGN.md §7 回寫、必要時修訂 §3.6 與 §4</li>
+</ul>
+</td><td>
+<ul>
+<li>任何 Go 或 React 程式碼</li>
+<li>內容引擎、lab.yaml 解析、checker</li>
+<li>VM provider、containerlab、遠端 runner（各自的 spike 屬 Phase 4 / 5）</li>
+<li>CI、分支保護、license（Phase 1 開工前另談）</li>
+</ul>
+</td></tr>
+</table></div>
+
+<h2><span class="n">02</span>已定前提</h2>
+<ul>
+<li>分支 <code>phase0/spikes</code>，完成後開 PR 回 main，squash merge。</li>
+<li>腳本放 <code>spikes/phase0/</code>，正式程式碼永不引用。Dockerfile 例外：它是正式產物，直接放 <code>images/node/</code>，spike 只負責建與量測。</li>
+<li>介面接管先試方案 A，符合 §06 的判準才退方案 B。</li>
+<li>每個節點保留 <code>eth0</code> 為管理介面走 NAT；題目只動 <code>eth1</code> 以上。</li>
+<li>Spike 由 planner 直接寫、直接跑，不走三層模型。</li>
+<li>執行環境是使用者的 WSL2（Ubuntu 24.04、Docker Engine 29.8、cgroup v2、4 CPU / 5.8 GB）。</li>
+</ul>
+
+<h2><span class="n">03</span>待批的提案</h2>
+<p>以下八項於 2026-09-21 隨 spec 一併採納。</p>
+
+<div class="decision"><b class="q">P1 腳本形式：純 bash，<code>make</code> 驅動</b>
+每支一個腳本加共用 <code>lib.sh</code>，<code>make -C spikes/phase0 s2</code> 跑單支，<code>all</code> 跑全部。每支印 <kbd>PASS</kbd> / <kbd>FAIL</kbd>，量測數字寫進 <code>spikes/phase0/results/&lt;id&gt;.txt</code>。
+<div class="why">理由：驗的是 Docker 與 systemd 的行為，不是 Go；bash 最短路徑。</div></div>
+
+<div class="decision"><b class="q">P2 Image 一次建完整版，含 k3s 離線 image</b>
+S1 直接建 DESIGN.md §4 的 66 套件版，並把 k3s airgap tarball（約 250 MB）<code>ctr images import</code> 進去。
+<div class="why">理由：Dockerfile 就是正式產物，不重工；S3 要驗「不拉網路也能起叢集」，非塞不可。</div></div>
+
+<div class="decision"><b class="q">P3 resolv.conf 交給 systemd-resolved：bootstrap 先 umount</b>
+Docker 會把 <code>/etc/resolv.conf</code>、<code>/etc/hosts</code>、<code>/etc/hostname</code> 以 bind mount 蓋進容器。bootstrap 在 privileged 容器內 <code>umount</code> 這三個檔，再讓 resolved 接管成 symlink。列入 S2 的 R2 驗證項。
+<div class="why">理由：所有 DNS 題都依賴 <code>resolvectl</code> 行為與真實伺服器一致；不 umount 就永遠是 Docker 的 127.0.0.11。</div></div>
+
+<div class="decision"><b class="q">P4 介面順序：建容器只接管理網路，再依 topology 順序逐一 connect</b>
+Docker 多網路同時接上時，<code>eth1</code>、<code>eth2</code> 是按網路名稱排序，不是宣告順序。改為 <code>docker create --network mgmt</code> 後依序 <code>docker network connect</code>，順序即宣告順序。S2 驗證。
+<div class="why">理由：比 MAC 對照改名簡單，且不需要 udev 規則。</div></div>
+
+<div class="decision"><b class="q">P5 冷啟動定義與門檻</b>
+從 <code>docker run</code> 第一個節點起，到 bootstrap 完成且 setup 可執行為止；image 已在本機。門檻：純 Ubuntu 雙節點 <b>&lt; 10 秒</b>；k3s server + agent 雙節點到兩節點 <code>Ready</code> <b>&lt; 30 秒</b>。
+<div class="why">理由：R5 原文只寫「&lt; 30 秒（含 k3s）」，沒定起訖點，量出來的數字會沒法比較。</div></div>
+
+<div class="decision"><b class="q">P6 方案 A 的失敗判準</b>
+見 §06。符合任一項即退方案 B，並在本 phase 內補做 B 的最小驗證。
+<div class="why">理由：沒有判準會變成「再試一下」的無底洞。</div></div>
+
+<div class="decision"><b class="q">P7 資源上限：先量再說</b>
+S3 量每個 k3s 節點的 RSS 與閒置 CPU，寫入結果文件；是否調高 <code>.wslconfig</code> 由數字決定。
+<div class="why">理由：這個數字直接決定 L5 複合題最多幾個節點，猜沒有意義。</div></div>
+
+<div class="decision"><b class="q">P8 加 S0 環境檢查</b>
+S1 之前先確認 WSL 核心有 vxlan、nf_tables、nf_conntrack、bridge、8021q、dummy、veth 模組，cgroup v2 unified，Docker 版本，<code>/dev/kmsg</code> 可用。
+<div class="why">理由：k3s 的 flannel 靠 vxlan、題目靠 nft；缺任一個 S3 / S2 直接白跑。</div></div>
+
+<h2><span class="n">04</span>驗證項目</h2>
+
+<div class="spike">
+<header><span class="id">S0</span><h3>環境檢查</h3><span class="tag risk">前置</span></header>
+<div class="grid">
+<div><b>做什麼</b><ul>
+<li>列出 P8 的核心模組是否已載入或可 <code>modprobe</code></li>
+<li>確認 cgroup v2、Docker 版本、<code>docker info</code> 的 cgroup driver</li>
+<li>確認 privileged 容器內可讀 <code>/dev/kmsg</code>、可掛 <code>/sys/fs/cgroup</code></li>
+</ul></div>
+<div><b>通過條件</b><ul>
+<li>所有模組可用</li>
+<li>cgroup v2 unified</li>
+</ul>
+<b>量測</b><ul><li>無，只有清單</li></ul></div>
+</div></div>
+
+<div class="spike">
+<header><span class="id">S1</span><h3>建 nsl/node image</h3><span class="tag risk">R5</span></header>
+<div class="grid">
+<div><b>做什麼</b><ul>
+<li>寫 <code>images/node/Dockerfile</code>：Ubuntu 24.04、systemd PID 1、§4 的 66 套件</li>
+<li>內建 <code>/etc/profile.d/nsl-history.sh</code>、networkd 啟用、NetworkManager 停用、k3s service 停用</li>
+<li>匯入 k3s airgap images</li>
+<li>起一個容器，確認 <code>systemctl is-system-running</code> 到達 running 或 degraded，列出 failed units</li>
+</ul></div>
+<div><b>通過條件</b><ul>
+<li>image 建得起來，systemd 開機無 failed unit（或每個 failed 都有解釋）</li>
+<li>66 套件的指令都在 PATH</li>
+</ul>
+<b>量測</b><ul>
+<li>image 大小</li>
+<li>建置時間</li>
+<li>單容器從 run 到 systemd running 的秒數</li>
+</ul></div>
+</div></div>
+
+<div class="spike">
+<header><span class="id">S2</span><h3>雙節點 networkd 接管</h3><span class="tag risk">R1</span><span class="tag risk">R2</span><span class="tag risk">R4</span></header>
+<div class="grid">
+<div><b>做什麼</b><ul>
+<li>建 <code>mgmt</code> 網路與一條 <code>--internal</code> link 網路</li>
+<li>兩個節點依 P4 順序接上，確認 <code>eth1</code> 對應 link</li>
+<li>bootstrap：umount resolv.conf 三檔、寫 netplan 宣告 Docker 配的位址、<code>netplan apply</code></li>
+<li>驗 <code>systemctl</code>、<code>journalctl -u</code>、<code>resolvectl status</code>、<code>netplan apply</code> 皆正常</li>
+<li>干擾測試：<code>docker network disconnect / connect</code>、<code>docker restart</code>、等待 10 分鐘，觀察位址是否被搶回</li>
+<li>把節點所有介面 <code>down</code>、iptables 全 DROP，確認 <code>docker exec</code> 仍可進去執行</li>
+</ul></div>
+<div><b>通過條件</b><ul>
+<li>兩節點經 <code>eth1</code> 互 ping 通</li>
+<li>netplan 改 IP 後生效且 Docker 不搶回</li>
+<li>resolved 接管後 <code>/etc/resolv.conf</code> 是 symlink</li>
+<li>斷網後 exec 可用</li>
+</ul>
+<b>量測</b><ul>
+<li>雙節點冷啟動秒數（P5 定義）</li>
+<li>bootstrap 本身耗時</li>
+</ul></div>
+</div></div>
+
+<div class="spike">
+<header><span class="id">S3</span><h3>k3s 雙節點叢集</h3><span class="tag risk">R3</span><span class="tag risk">R5</span></header>
+<div class="grid">
+<div><b>做什麼</b><ul>
+<li>兩個 nsl/node 容器，一個起 k3s server、一個起 agent，走 link 網路而非 mgmt</li>
+<li>管理網路斷外連（模擬 <code>internet: false</code>），確認 image 全部來自 airgap</li>
+<li>各節點跑一個 Pod，跨節點互 ping，確認 flannel VXLAN 通</li>
+<li>驗 <code>kubectl</code>、<code>crictl</code>、<code>ctr</code> 可用</li>
+</ul></div>
+<div><b>通過條件</b><ul>
+<li>兩節點 <code>Ready</code></li>
+<li>跨節點 Pod 互 ping 通</li>
+<li>過程零次外部 image pull</li>
+</ul>
+<b>量測</b><ul>
+<li>到兩節點 Ready 的秒數</li>
+<li>每節點 RSS、閒置 CPU（P7）</li>
+</ul></div>
+</div></div>
+
+<div class="spike">
+<header><span class="id">S4</span><h3>指令歷史 hook 與 exec 隔離</h3><span class="tag risk">R4</span><span class="tag risk">D11</span></header>
+<div class="grid">
+<div><b>做什麼</b><ul>
+<li>透過 <code>docker exec -it bash -l</code> 進節點，敲數條指令</li>
+<li>確認 <code>/var/log/nsl/commands.jsonl</code> 有時間、cwd、指令、exit code</li>
+<li>驗 <code>sudo -i</code>、<code>su</code>、子 shell 的情況是否漏記</li>
+<li>從 host 端 <code>docker exec</code> 跑一支模擬 checker 腳本，10 秒逾時，確認不影響使用者 shell</li>
+</ul></div>
+<div><b>通過條件</b><ul>
+<li>互動 shell 的每條指令都有紀錄</li>
+<li>漏記的情況有清單（回寫設計）</li>
+</ul>
+<b>量測</b><ul><li>無</li></ul></div>
+</div></div>
+
+<h2><span class="n">05</span>Bootstrap 契約草案</h2>
+<p>S2 會產出一支 <code>bootstrap.sh</code>，之後 Phase 1 的 Docker provider 用同一份邏輯。它在容器內以 root 執行，輸入是環境變數：</p>
+<div class="tbl"><table>
+<tr><th>變數</th><th>意義</th></tr>
+<tr><td><code>NSL_NODE</code></td><td>節點名稱，設為 hostname</td></tr>
+<tr><td><code>NSL_ROLE</code></td><td><code>ubuntu</code> / <code>ubuntu-nm</code> / <code>k3s-server</code> / <code>k3s-agent</code></td></tr>
+<tr><td><code>NSL_IFACES</code></td><td>依序的介面與位址，例如 <code>eth1=10.0.5.10/24,eth2=192.168.1.1/24</code></td></tr>
+<tr><td><code>NSL_K3S_SERVER</code></td><td>agent 用：server 的 URL 與 token</td></tr>
+</table></div>
+<p>bootstrap 做的事：umount Docker 的三個檔、依 role 選 networkd 或 NetworkManager、寫 netplan、<code>netplan apply</code>、依 role 起 k3s。這份契約在 Phase 0 結束時定稿，寫進 DESIGN.md。</p>
+
+<h2><span class="n">06</span>方案 A 失敗判準與退路</h2>
+<p>符合任一項即判定方案 A 失敗：</p>
+<ol>
+<li><code>netplan apply</code> 後 networkd 無法在 <code>eth1</code> 宣告位址，或位址與 Docker 配的衝突導致介面不穩。</li>
+<li><code>docker network connect / disconnect</code> 或 <code>docker restart</code> 後，Docker 把位址改回自己配的值。</li>
+<li>穩定觀察 10 分鐘內，位址、路由或介面狀態有非預期變動。</li>
+<li>resolv.conf 無法交給 resolved（umount 失敗或重啟後被蓋回）。</li>
+</ol>
+<div class="callout">
+<p><b>退路 B。</b>容器以 <code>--network none</code> 建立，只由 runner 在 host 端建 veth pair，一端 <code>ip link set netns</code> 進容器，另一端接 host bridge。位址完全由容器內 netplan 設定，Docker 不參與。這是 containerlab 的做法。</p>
+<p>若退 B，在本 phase 內補一支 <code>S2b</code> 驗最小可行（兩節點互 ping、restart 後 veth 仍在），詳細設計留 Phase 1 spec。</p>
+</div>
+
+<h2><span class="n">07</span>交付物與完成定義</h2>
+<div class="tbl"><table>
+<tr><th>交付物</th><th>路徑</th></tr>
+<tr><td>驗證腳本</td><td><code>spikes/phase0/{Makefile, lib.sh, s0.sh … s4.sh, bootstrap.sh}</code></td></tr>
+<tr><td>量測原始輸出</td><td><code>spikes/phase0/results/</code></td></tr>
+<tr><td>正式 Dockerfile</td><td><code>images/node/Dockerfile</code> 與附帶的 profile / unit 檔</td></tr>
+<tr><td>結論文件</td><td><code>docs/PHASE0-RESULTS.md</code>：每項風險一段，含數字、結論、對設計的影響</td></tr>
+<tr><td>設計回寫</td><td>DESIGN.md §7 填實測結果；§3.6、§4、§5 依發現修訂</td></tr>
+</table></div>
+<p><b>完成定義。</b>R1 到 R5 都有「通過 / 未通過 + 數字」；方案 A 有明確判定；bootstrap 契約定稿；PR 合併進 main。</p>
+<p><b>時間盒。</b>每支 spike 上限半個工作天，整個 phase 上限三個工作天。超時代表未知數比預期大，回報你重新評估而不是硬做。</p>
+
+<h2><span class="n">08</span>風險與依賴</h2>
+<ul>
+<li><b>WSL2 核心。</b>若 S0 缺 vxlan 或 nf_tables，需要自編 WSL 核心或改用 host-gw，這會是第一個回報點。</li>
+<li><b>Image 建置需要網路。</b>66 套件加 k3s 約需下載 1 GB 以上，第一次建置可能 10 到 20 分鐘。</li>
+<li><b>WSL 記憶體。</b>S3 同時跑兩個 k3s 節點可能逼近 5.8 GB，若 OOM 會直接建議調 <code>.wslconfig</code>。</li>
+<li><b>Docker 29 的 systemd 相容性。</b>privileged 加 cgroup v2 一般沒問題，但 Docker 29 較新，S1 若卡住會先試 <code>--cgroupns=host</code>。</li>
+</ul>
+
+<div class="approve">
+<h3 style="margin-top:0">批准紀錄</h3>
+<p>2026-09-21 使用者批准：P1 到 P8 全採納，時間盒三個工作天。開工分支 <code>phase0/spikes</code>。</p>
+</div>
+</div>

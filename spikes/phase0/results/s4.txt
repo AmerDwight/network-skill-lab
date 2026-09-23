@@ -1,0 +1,32 @@
+
+== interactive login shell as root (docker exec -i bash -il)
+PASS  log file exists
+{"ts":"2026-09-21T01:44:29.453Z","user":"root","cwd":"/tmp","cmd":"cd /tmp","exit":0}
+{"ts":"2026-09-21T01:44:29.465Z","user":"root","cwd":"/tmp","cmd":"ls -d /etc","exit":0}
+{"ts":"2026-09-21T01:44:29.473Z","user":"root","cwd":"/tmp","cmd":"false","exit":1}
+{"ts":"2026-09-21T01:44:29.480Z","user":"root","cwd":"/tmp","cmd":"echo   \"quoted   spaces\"","exit":0}
+{"ts":"2026-09-21T01:44:29.486Z","user":"root","cwd":"/tmp","cmd":"true | false","exit":1}
+PASS  records cd /tmp
+PASS  cwd updated after cd
+PASS  exit code of false is 1
+PASS  quotes preserved
+PASS  pipeline recorded whole
+PASS  every line is valid JSON
+PASS  no spurious entry from .bash_history at first prompt
+PASS  user field is root
+
+== non-login interactive shell (bash -i) also hooked
+PASS  bash -i records
+
+== nsl user, sudo -i and su
+{"ts":"2026-09-21T01:44:36.419Z","user":"nsl","cwd":"/","cmd":"whoami","exit":0}
+{"ts":"2026-09-21T01:44:36.460Z","user":"root","cwd":"/root","cmd":"whoami","exit":0}
+{"ts":"2026-09-21T01:44:36.468Z","user":"nsl","cwd":"/","cmd":"sudo -i","exit":0}
+PASS  nsl user commands recorded
+PASS  sudo -i itself recorded
+PASS  commands inside sudo -i recorded as root
+
+== gaps (informational)
+non-interactive children are not recorded (expected): 2 outer entries, inner commands only visible as the outer string
+
+RESULT s4 PASS (13 checks)

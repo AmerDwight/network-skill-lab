@@ -1,0 +1,54 @@
+
+== topology
+PASS  systemd up on nsl-s2-web01
+PASS  systemd up on nsl-s2-db01
+PASS  bootstrap exit 0 on both
+MEASURE cold_start_seconds = 6.29
+MEASURE systemd_wait_seconds = 5.19
+MEASURE bootstrap_seconds = 1.10
+
+== P4 interface order follows connect order, not network name
+PASS  web01 eth1 is zeta (10.0.5.x): 10.0.5.10/24
+PASS  web01 eth2 is alpha (10.0.6.x): 10.0.6.10/24
+
+== R1 networkd owns eth1
+PASS  networkctl eth1 configured:                        State: routable (configuring)
+PASS  eth1 unmanaged by docker: no /run/docker
+PASS  web01 ping db01 over link
+PASS  eth0 still has default route (mgmt untouched)
+PASS  eth0 unmanaged by networkd
+PASS  netplan apply is idempotent
+PASS  netplan changes IP and takes effect
+PASS  db01 ping web01 on new IP
+PASS  docker inspect still believes .10 (docker not reconciling)
+
+== R1 docker interference
+PASS  after network connect eth1 keeps netplan IP
+PASS  new interface eth3 appeared for extra
+PASS  after network disconnect eth1 keeps netplan IP
+PASS  peer still reachable
+
+== R2 systemd services in container
+PASS  resolv.conf is resolved symlink: /run/systemd/resolve/stub-resolv.conf
+PASS  resolvectl status ok
+PASS  resolved global DNS: DNS Servers: 127.0.0.11
+PASS  dns resolves via resolved (mgmt)
+PASS  journalctl -u networkd has entries
+PASS  hostname is web01
+PASS  systemctl list-units works
+
+== R1 soak 60s: address stability
+PASS  no address/route drift over 60s
+
+== docker restart behaviour (informational)
+after restart eth1: eth1@if176 UP 10.0.5.10/24 10.0.5.11/24 
+after restart eth2: eth2@if177 UP 10.0.6.10/24 
+after restart resolv.conf: /run/systemd/resolve/stub-resolv.conf
+PASS  re-bootstrap after restart restores state
+
+== R4 exec survives downed network
+PASS  exec works with all links down + DROP
+PASS  exec can run a checker-style script under timeout
+PASS  exec latency ms: 63
+
+RESULT s2 PASS (30 checks)

@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Runs once inside a freshly started node, as root, after systemd is up.
+# Inputs: NSL_NODE, NSL_ROLE, NSL_IFACES ("eth1=10.0.5.10/24,eth2=..."), NSL_K3S_SERVER, NSL_K3S_TOKEN, NSL_DNS.
+set -euo pipefail
+
+NSL_NODE="${NSL_NODE:-$(hostname)}"
+NSL_ROLE="${NSL_ROLE:-ubuntu}"
+NSL_IFACES="${NSL_IFACES:-}"
+NSL_DNS="${NSL_DNS:-$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)}"
+
+detach_docker_files() {
+  for f in /etc/resolv.conf /etc/hosts /etc/hostname; do
+    if mountpoint -q "$f"; then
+      cp "$f" "$f.docker"
+      umount "$f"
+    fi
+  done
+  printf '%s\n' "$NSL_NODE" > /etc/hostname
+  hostname "$NSL_NODE"
+  printf '127.0.0.1 localhost\n127.0.1.1 %s\n\n::1 localhost ip6-localhost ip6-loopback\n' "$NSL_NODE" > /etc/hosts
+  ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+}
+
+write_resolved_conf() {
+  mkdir -p /etc/systemd/resolved.conf.d
+  printf '[Resolve]\nDNS=%s\n' "$NSL_DNS" > /etc/systemd/resolved.conf.d/10-nsl-mgmt.conf
+  systemctl restart systemd-resolved
+}
+
+write_netplan() {
+  local renderer=networkd
+  [ "$NSL_ROLE" = ubuntu-nm ] && renderer=NetworkManager
+  {
+    printf 'network:\n  version: 2\n  renderer: %s\n' "$renderer"
+    if [ -n "$NSL_IFACES" ]; then
+      printf '  ethernets:\n'
+      IFS=, read -ra pairs <<< "$NSL_IFACES"
+      for p in "${pairs[@]}"; do
+        printf '    %s:\n      addresses: [%s]\n' "${p%%=*}" "${p#*=}"
+      done
+    fi
+  } > /etc/netplan/50-nsl.yaml
+  chmod 0600 /etc/netplan/50-nsl.yaml
+  if [ "$renderer" = NetworkManager ]; then
+    systemctl disable --now systemd-networkd
+    systemctl enable --now NetworkManager
+  fi
+  netplan apply
+}
+
+first_ip() {
+  [ -n "$NSL_IFACES" ] || return 0
+  local first="${NSL_IFACES%%,*}"
+  first="${first#*=}"
+  printf '%s' "${first%%/*}"
+}
+
+start_k3s() {
+  local ip; ip="$(first_ip)"
+  case "$NSL_ROLE" in k3s-server|k3s-agent) ;; *) return 0;; esac
+  mkdir -p /etc/rancher/k3s /var/lib/rancher/k3s/agent/images
+  ln -sf /usr/share/nsl/k3s-airgap-images-amd64.tar.zst /var/lib/rancher/k3s/agent/images/
+  case "$NSL_ROLE" in
+    k3s-server)
+      {
+        printf 'token: %s\nwrite-kubeconfig-mode: "0644"\n' "$NSL_K3S_TOKEN"
+        [ -n "$ip" ] && printf 'node-ip: %s\nflannel-iface: eth1\n' "$ip"
+      } > /etc/rancher/k3s/config.yaml
+      ln -sf /etc/rancher/k3s/k3s.yaml /root/.kube-config 2>/dev/null || true
+      printf 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\n' > /etc/profile.d/nsl-kubeconfig.sh
+      systemctl enable --now --no-block k3s
+      ;;
+    k3s-agent)
+      {
+        printf 'server: https://%s:6443\ntoken: %s\n' "$NSL_K3S_SERVER" "$NSL_K3S_TOKEN"
+        [ -n "$ip" ] && printf 'node-ip: %s\nflannel-iface: eth1\n' "$ip"
+      } > /etc/rancher/k3s/config.yaml
+      systemctl enable --now --no-block k3s-agent
+      ;;
+  esac
+}
+
+detach_docker_files
+write_resolved_conf
+write_netplan
+start_k3s
