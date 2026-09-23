@@ -28,6 +28,11 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessInMode(t, "guided")
+}
+
+func newHarnessInMode(t *testing.T, mode string) *harness {
+	t.Helper()
 
 	labs, err := content.Load("../../content")
 	if err != nil {
@@ -48,7 +53,7 @@ func newHarness(t *testing.T) *harness {
 	svc := attempt.New(attempt.Deps{
 		Store:    st,
 		Runner:   fr,
-		Labs:     labs,
+		Content:  &content.Content{Labs: labs},
 		Image:    "nsl/node",
 		RunnerID: "fake",
 		Logger:   discardLogger(),
@@ -77,7 +82,7 @@ func newHarness(t *testing.T) *harness {
 
 	chk.Start(t.Context())
 
-	view, err := svc.Start(t.Context(), user.ID, labs[0].Id, "guided")
+	view, err := svc.Start(t.Context(), user.ID, labs[0].Id, mode)
 	if err != nil {
 		t.Fatalf("start attempt: %v", err)
 	}

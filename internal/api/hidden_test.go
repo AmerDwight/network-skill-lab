@@ -45,6 +45,7 @@ func writeHiddenLab(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(dir, "checks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTopics(t, root)
 	files := map[string]struct {
 		data string
 		mode os.FileMode

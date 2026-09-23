@@ -45,7 +45,7 @@ func newHarness(t *testing.T) *harness {
 	svc := attempt.New(attempt.Deps{
 		Store:    st,
 		Runner:   fr,
-		Labs:     labs,
+		Content:  &content.Content{Labs: labs},
 		Image:    "nsl/node",
 		RunnerID: "fake",
 		Logger:   discardLogger(),

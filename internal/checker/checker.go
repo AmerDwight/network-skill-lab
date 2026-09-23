@@ -45,6 +45,7 @@ type Checker struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	loops  map[string]context.CancelFunc
+	states map[string]*sweepState
 
 	wg        sync.WaitGroup
 	closeOnce sync.Once
@@ -69,6 +70,7 @@ func New(deps Deps) *Checker {
 		log:      deps.Logger,
 		ticker:   newTicker,
 		loops:    map[string]context.CancelFunc{},
+		states:   map[string]*sweepState{},
 	}
 }
 
@@ -102,6 +104,7 @@ func (c *Checker) Close() {
 		}
 		for id, cancel := range c.loops {
 			delete(c.loops, id)
+			delete(c.states, id)
 			cancel()
 		}
 		c.mu.Unlock()
@@ -153,10 +156,22 @@ func (c *Checker) startLoop(ctx context.Context, id string) {
 func (c *Checker) stopLoop(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	delete(c.states, id)
 	if cancel, ok := c.loops[id]; ok {
 		delete(c.loops, id)
 		cancel()
 	}
+}
+
+func (c *Checker) stateFor(id string) *sweepState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	state, ok := c.states[id]
+	if !ok {
+		state = &sweepState{last: map[string]string{}, firstPassed: map[string]time.Time{}}
+		c.states[id] = state
+	}
+	return state
 }
 
 type checkpoint struct {
@@ -167,6 +182,7 @@ type checkpoint struct {
 }
 
 type sweepState struct {
+	mu          sync.Mutex
 	last        map[string]string
 	firstPassed map[string]time.Time
 }
@@ -189,7 +205,7 @@ func (c *Checker) run(ctx context.Context, id string) {
 	ticks, stop := c.ticker(c.interval)
 	defer stop()
 
-	state := &sweepState{last: map[string]string{}, firstPassed: map[string]time.Time{}}
+	state := c.stateFor(id)
 	done := make(chan bool, 1)
 	sweeping := false
 
@@ -205,40 +221,63 @@ func (c *Checker) run(ctx context.Context, id string) {
 			c.wg.Add(1)
 			go func() {
 				defer c.wg.Done()
-				done <- c.sweep(ctx, view, checkpoints, state)
+				_, passed := c.sweep(ctx, view, checkpoints, state)
+				done <- passed
 			}()
 		case passed := <-done:
+			if ctx.Err() != nil {
+				return
+			}
 			sweeping = false
 			if c.swept != nil {
 				c.swept()
 			}
-			if passed {
+			if passed && view.Mode != attempt.ModeReal {
+				c.finish(ctx, id)
 				return
 			}
 		}
 	}
 }
 
-func (c *Checker) sweep(ctx context.Context, view attempt.View, checkpoints []checkpoint, state *sweepState) bool {
-	statuses := make([]string, len(checkpoints))
+func (c *Checker) SweepNow(ctx context.Context, id string) (map[string]string, error) {
+	view, err := c.attempts.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	checkpoints, err := loadCheckpoints(view)
+	if err != nil {
+		return nil, err
+	}
+	statuses, _ := c.sweep(ctx, view, checkpoints, c.stateFor(id))
+	return statuses, nil
+}
+
+func (c *Checker) sweep(ctx context.Context, view attempt.View, checkpoints []checkpoint, state *sweepState) (map[string]string, bool) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	results := make([]string, len(checkpoints))
 	var wg sync.WaitGroup
 	for i, cp := range checkpoints {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			statuses[i] = c.check(ctx, view.Id, view.SandboxID, cp)
+			results[i] = c.check(ctx, view.Id, view.SandboxID, cp)
 		}()
 	}
 	wg.Wait()
 
 	if ctx.Err() != nil {
-		return true
+		return nil, false
 	}
 
 	now := time.Now().UTC()
+	statuses := make(map[string]string, len(checkpoints))
 	passed := true
 	for i, cp := range checkpoints {
-		status := statuses[i]
+		status := results[i]
+		statuses[cp.id] = status
 		if status != store.CheckpointPass {
 			passed = false
 		} else if _, ok := state.firstPassed[cp.id]; !ok {
@@ -257,8 +296,10 @@ func (c *Checker) sweep(ctx context.Context, view attempt.View, checkpoints []ch
 		if err := c.record(ctx, run); err != nil {
 			c.log.Error("record checkpoint run", "attempt", view.Id, "checkpoint", cp.id, "error", err)
 		}
-		if previous, seen := state.last[cp.id]; !seen || previous != status {
-			state.last[cp.id] = status
+
+		previous, seen := state.last[cp.id]
+		state.last[cp.id] = status
+		if view.Mode != attempt.ModeReal && (!seen || previous != status) {
 			c.attempts.PublishCheckpoint(view.Id, attempt.CheckpointEvent{
 				Id:            cp.id,
 				Status:        status,
@@ -266,12 +307,7 @@ func (c *Checker) sweep(ctx context.Context, view attempt.View, checkpoints []ch
 			})
 		}
 	}
-
-	if !passed {
-		return false
-	}
-	c.finish(ctx, view.Id)
-	return true
+	return statuses, passed
 }
 
 func (c *Checker) check(ctx context.Context, id, sandbox string, cp checkpoint) string {

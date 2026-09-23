@@ -22,7 +22,7 @@ var errBadRequest = errors.New("bad request")
 
 type Deps struct {
 	Attempts *attempt.Service
-	Labs     []content.Lab
+	Content  *content.Content
 	Store    *store.Store
 	Runner   runner.Runner
 	Recorder *recorder.Recorder
@@ -31,8 +31,9 @@ type Deps struct {
 
 type server struct {
 	attempts  *attempt.Service
-	labs      []content.Lab
+	content   *content.Content
 	byID      map[string]content.Lab
+	docs      map[string]content.Doc
 	store     *store.Store
 	runner    runner.Runner
 	recorder  *recorder.Recorder
@@ -44,14 +45,22 @@ func New(deps Deps) http.Handler {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
-	byID := make(map[string]content.Lab, len(deps.Labs))
-	for _, lab := range deps.Labs {
+	if deps.Content == nil {
+		deps.Content = &content.Content{}
+	}
+	byID := make(map[string]content.Lab, len(deps.Content.Labs))
+	for _, lab := range deps.Content.Labs {
 		byID[lab.Id] = lab
+	}
+	docs := make(map[string]content.Doc, len(deps.Content.Docs))
+	for _, doc := range deps.Content.Docs {
+		docs[doc.ID] = doc
 	}
 	s := &server{
 		attempts:  deps.Attempts,
-		labs:      deps.Labs,
+		content:   deps.Content,
 		byID:      byID,
+		docs:      docs,
 		store:     deps.Store,
 		runner:    deps.Runner,
 		recorder:  deps.Recorder,
@@ -61,12 +70,19 @@ func New(deps Deps) http.Handler {
 
 	r := chi.NewRouter()
 	r.Get("/api/health", s.health)
+	r.Get("/api/topics", s.listTopics)
 	r.Get("/api/labs", s.listLabs)
 	r.Get("/api/labs/{id}", s.getLab)
+	r.Get("/api/docs", s.listDocs)
+	r.Get("/api/docs/*", s.getDoc)
+	r.Get("/api/tracks", s.listTracks)
+	r.Get("/api/tracks/{id}", s.getTrack)
+	r.Post("/api/progress", s.markProgress)
 	r.Post("/api/attempts", s.createAttempt)
 	r.Get("/api/attempts/current", s.currentAttempt)
 	r.Get("/api/attempts/{id}", s.getAttempt)
 	r.Post("/api/attempts/{id}/abandon", s.abandonAttempt)
+	r.Post("/api/attempts/{id}/submit", s.submitAttempt)
 	r.Get("/api/attempts/{id}/result", s.attemptResult)
 	r.Get("/ws/attempts/{id}/events", s.events)
 	r.Get("/ws/attempts/{id}/term/{node}/{tab}", s.terminal)
@@ -145,8 +161,14 @@ func classify(err error) (int, string) {
 		return http.StatusNotFound, "not_found"
 	case errors.Is(err, attempt.ErrUnknownLab):
 		return http.StatusNotFound, "unknown_lab"
+	case errors.Is(err, attempt.ErrUnknownDoc):
+		return http.StatusNotFound, "not_found"
 	case errors.Is(err, attempt.ErrModeNotAllowed):
 		return http.StatusBadRequest, "mode_not_allowed"
+	case errors.Is(err, attempt.ErrModeNotReal):
+		return http.StatusBadRequest, "mode_not_real"
+	case errors.Is(err, attempt.ErrProvisioning):
+		return http.StatusConflict, "attempt_provisioning"
 	case errors.Is(err, attempt.ErrTerminal):
 		return http.StatusConflict, "attempt_finished"
 	case errors.Is(err, attempt.ErrNotTerminal):

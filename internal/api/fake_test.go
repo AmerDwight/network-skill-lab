@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
+	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
@@ -171,21 +171,23 @@ func (p *fakePTY) isClosed() bool {
 }
 
 type fakeRunner struct {
-	mu      sync.Mutex
-	ptys    []*fakePTY
-	openErr error
-	health  runner.Health
-	steps   []string
-	gate    chan struct{}
-	opening chan struct{}
+	mu        sync.Mutex
+	ptys      []*fakePTY
+	openErr   error
+	health    runner.Health
+	steps     []string
+	checkExit int
+	gate      chan struct{}
+	opening   chan struct{}
 }
 
 var _ runner.Runner = (*fakeRunner)(nil)
 
 func newFakeRunner() *fakeRunner {
 	return &fakeRunner{
-		health: runner.Health{OK: true, Docker: true, Image: true, ImageName: "nsl/node", MemAvailableMB: 2048},
-		steps:  []string{"networks", "containers", "bootstrap", "setup"},
+		health:    runner.Health{OK: true, Docker: true, Image: true, ImageName: "nsl/node", MemAvailableMB: 2048},
+		steps:     []string{"networks", "containers", "bootstrap", "setup"},
+		checkExit: 1,
 	}
 }
 
@@ -250,8 +252,21 @@ func (f *fakeRunner) OpenTerminal(_ context.Context, _ runner.SandboxID, _ strin
 	return pty, nil
 }
 
-func (f *fakeRunner) Exec(_ context.Context, _ runner.SandboxID, _ string, _ []string, _ runner.ExecOptions) (runner.ExecResult, error) {
-	return runner.ExecResult{}, errors.New("not implemented")
+func (f *fakeRunner) Exec(_ context.Context, _ runner.SandboxID, _ string, _ []string, opts runner.ExecOptions) (runner.ExecResult, error) {
+	if opts.Stdin != nil {
+		if _, err := io.Copy(io.Discard, opts.Stdin); err != nil {
+			return runner.ExecResult{}, err
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return runner.ExecResult{ExitCode: f.checkExit}, nil
+}
+
+func (f *fakeRunner) passChecks() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.checkExit = 0
 }
 
 func (f *fakeRunner) Destroy(_ context.Context, _ runner.SandboxID) error { return nil }
@@ -280,6 +295,7 @@ type harness struct {
 	t        *testing.T
 	server   *httptest.Server
 	attempts *attempt.Service
+	checker  *checker.Checker
 	store    *store.Store
 	runner   *fakeRunner
 	clock    *fakeClock
@@ -296,7 +312,7 @@ func newHarness(t *testing.T) *harness {
 func newHarnessWithContent(t *testing.T, dir string) *harness {
 	t.Helper()
 
-	labs, err := content.Load(dir)
+	loaded, err := content.LoadAll(dir)
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}
@@ -318,13 +334,24 @@ func newHarnessWithContent(t *testing.T, dir string) *harness {
 	attempts := attempt.New(attempt.Deps{
 		Store:    st,
 		Runner:   fake,
-		Labs:     labs,
+		Content:  loaded,
 		Image:    "nsl/node",
 		RunnerID: "fake",
 		After:    clock.After,
 		Logger:   logger,
 	})
 	t.Cleanup(attempts.Close)
+
+	checks := checker.New(checker.Deps{
+		Store:    st,
+		Runner:   fake,
+		Attempts: attempts,
+		Interval: time.Hour,
+		Logger:   logger,
+	})
+	t.Cleanup(checks.Close)
+	attempts.SetSweeper(checks)
+	checks.Start(t.Context())
 
 	recordings := recorder.New(recorder.Deps{
 		Store:    st,
@@ -337,7 +364,7 @@ func newHarnessWithContent(t *testing.T, dir string) *harness {
 
 	server := httptest.NewServer(New(Deps{
 		Attempts: attempts,
-		Labs:     labs,
+		Content:  loaded,
 		Store:    st,
 		Runner:   fake,
 		Recorder: recordings,
@@ -349,10 +376,11 @@ func newHarnessWithContent(t *testing.T, dir string) *harness {
 		t:        t,
 		server:   server,
 		attempts: attempts,
+		checker:  checks,
 		store:    st,
 		runner:   fake,
 		clock:    clock,
-		labs:     labs,
+		labs:     loaded.Labs,
 		user:     user,
 		dataDir:  dataDir,
 	}
@@ -378,7 +406,17 @@ func (h *harness) do(method, path, body string) *http.Response {
 
 func (h *harness) start() string {
 	h.t.Helper()
-	resp := h.do(http.MethodPost, "/api/attempts", `{"lab_id":"`+h.labs[0].Id+`","mode":"guided"}`)
+	return h.startMode("guided")
+}
+
+func (h *harness) startMode(mode string) string {
+	h.t.Helper()
+	return h.startLab(h.labs[0].Id, mode)
+}
+
+func (h *harness) startLab(labID, mode string) string {
+	h.t.Helper()
+	resp := h.do(http.MethodPost, "/api/attempts", `{"lab_id":"`+labID+`","mode":"`+mode+`"}`)
 	if resp.StatusCode != http.StatusCreated {
 		h.t.Fatalf("start attempt: status = %d", resp.StatusCode)
 	}
@@ -387,12 +425,31 @@ func (h *harness) start() string {
 
 func (h *harness) running() string {
 	h.t.Helper()
-	id := h.start()
+	return h.runningMode("guided")
+}
+
+func (h *harness) runningMode(mode string) string {
+	h.t.Helper()
+	return h.runningLab(h.labs[0].Id, mode)
+}
+
+func (h *harness) runningLab(labID, mode string) string {
+	h.t.Helper()
+	id := h.startLab(labID, mode)
 	waitUntil(h.t, "the attempt to be running", func() bool {
 		view, err := h.attempts.Get(h.t.Context(), id)
 		return err == nil && view.Status == store.StatusRunning
 	})
 	return id
+}
+
+func (h *harness) submit(id string) map[string]any {
+	h.t.Helper()
+	resp := h.do(http.MethodPost, "/api/attempts/"+id+"/submit", "")
+	if resp.StatusCode != http.StatusOK {
+		h.t.Fatalf("submit attempt: status = %d", resp.StatusCode)
+	}
+	return decodeJSON(h.t, resp)
 }
 
 func (h *harness) socketURL(path string) string {

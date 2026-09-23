@@ -96,7 +96,7 @@ func TestListLabs(t *testing.T) {
 		t.Fatalf("got %d labs, want %d", len(labs), len(h.labs))
 	}
 	lab := labs[0].(map[string]any)
-	requireKeys(t, lab, "id", "title", "topic", "level", "modes", "estimated_minutes")
+	requireKeys(t, lab, "id", "title", "topic", "level", "modes", "estimated_minutes", "related_docs", "has_hidden_checkpoints")
 	if lab["title"] != h.labs[0].Title.Zh {
 		t.Errorf("title = %v, want the zh title", lab["title"])
 	}
@@ -136,7 +136,8 @@ func TestGetLab(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body := decodeJSON(t, resp)
-	requireKeys(t, body, "id", "title", "topic", "level", "modes", "estimated_minutes", "nodes", "checkpoints")
+	requireKeys(t, body, "id", "title", "topic", "level", "modes", "estimated_minutes", "related_docs",
+		"has_hidden_checkpoints", "nodes", "checkpoints", "topic_title")
 
 	nodes := body["nodes"].([]any)
 	if len(nodes) == 0 {
@@ -179,7 +180,8 @@ func TestCreateAttempt(t *testing.T) {
 	body := decodeJSON(t, resp)
 	requireKeys(t, body,
 		"id", "lab_id", "mode", "status", "error_message", "lab", "ticket", "nodes",
-		"checkpoints", "elapsed_ms", "started_at", "ended_at", "server_time", "created_at")
+		"checkpoints", "checkpoints_hidden", "tutorial_steps", "submit_count",
+		"elapsed_ms", "started_at", "ended_at", "server_time", "created_at")
 
 	if body["status"] != "provisioning" && body["status"] != "running" {
 		t.Errorf("status = %v", body["status"])
@@ -196,7 +198,8 @@ func TestCreateAttempt(t *testing.T) {
 	if ticket := body["ticket"].(string); strings.Contains(ticket, "{{") {
 		t.Errorf("ticket still has placeholders: %q", ticket)
 	}
-	requireKeys(t, body["lab"].(map[string]any), "id", "title", "topic", "level", "modes", "estimated_minutes")
+	requireKeys(t, body["lab"].(map[string]any), "id", "title", "topic", "level", "modes", "estimated_minutes",
+		"related_docs", "has_hidden_checkpoints")
 
 	checkpoints := body["checkpoints"].([]any)
 	if len(checkpoints) != 2 {
@@ -301,7 +304,7 @@ func TestResult(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body := decodeJSON(t, resp)
-	requireKeys(t, body, "attempt_id", "status", "lab", "elapsed_ms", "command_count", "checkpoints", "solution")
+	requireKeys(t, body, "attempt_id", "status", "lab", "elapsed_ms", "command_count", "submit_count", "checkpoints", "solution")
 	if body["attempt_id"] != id || body["status"] != "abandoned" {
 		t.Errorf("result = %v", body)
 	}
