@@ -264,6 +264,36 @@ content/tracks/network-basics.yaml         # DESIGN.md §3.7；step 的 doc / la
 <tr><td><code>GET /api/attempts/{id}</code></td><td>加 <code>mode</code> 相關欄位：<code>tutorial_steps</code>（tutorial）、<code>submit_count</code>（real）；real 模式不回 checkpoints</td></tr>
 <tr><td>events WS</td><td>provisioning step 加 <code>k3s</code> 與 <code>precheck</code>（含 <code>attempt: n</code>）；real 模式不送 checkpoint 事件</td></tr>
 </table></div>
+<h4>§09 補充：JSON 形狀（2026-09-23 planner 定稿，T3 與 T5、T6 共同依據）</h4>
+<pre><code>GET /api/topics?lang=            → [ TopicNode ]
+TopicNode = { "id": "net", "title", "labs": 3, "docs": 2, "children": [ TopicNode ] }   計數含子孫
+
+GET /api/labs?lang=&amp;topic=net/ip   → [ LabSummary ]（topic 缺省 = 全部；含子主題）
+LabSummary += { "related_docs": [{ "id", "title" }], "has_hidden_checkpoints": bool }
+GET /api/labs/{id}?lang=          → LabSummary + { "nodes": [{ "name", "role" }],
+                                     "checkpoints": [{ "id", "title" }]（只列 visible，標題保留 {{param}}），
+                                     "topic_title" }
+
+GET /api/docs?lang=               → [{ "id", "title", "topic" }]
+GET /api/docs/{id...}?lang=       → { "id", "title", "topic", "body": "markdown", "completed": bool }
+
+GET /api/tracks?lang=             → [{ "id", "title", "steps": 6, "completed": 2 }]
+GET /api/tracks/{id}?lang=        → { "id", "title", "steps": [ TrackStep ] }
+TrackStep = { "kind": "doc"|"lab", "ref", "title", "mode": "guided"|null, "completed": bool }
+
+POST /api/progress  { "kind": "doc", "ref": "net/ip/guide" }   → 204（lab 不可手動標記 → 400）
+
+Attempt += { "mode", "submit_count",
+             "tutorial_steps": [{ "checkpoint", "instruction": "markdown" }] | null,   只有 tutorial
+             "checkpoints_hidden": bool }                                               real 為 true 且 checkpoints 為 []
+POST /api/attempts/{id}/submit    → 200 { "passed": bool, "checkpoints": [{ "id", "title", "status" }],
+                                          "hidden_failed": n, "submit_count": n }
+                                     409 attempt_finished / 400 mode_not_real
+Result += { "submit_count", "checkpoints"[].visible }
+
+events WS：provisioning 加 { "step": "precheck", "attempt": 2 } 與 { "step": "k3s" }；real 模式不送 checkpoint 事件；
+提交後若未通過，伺服器送 { "type": "submit", "passed": false, "hidden_failed": n, "submit_count": n }（前端用它更新次數）。</code></pre>
+
 <h4>Web</h4>
 <ul>
 <li><code>/</code>：主題樹側欄 + 該主題的 lab 卡片；進行中 attempt 的 banner 不變。</li>
