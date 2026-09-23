@@ -15,15 +15,13 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
-const (
-	contentDir  = "../../content"
-	waitTimeout = 5 * time.Second
-)
+const waitTimeout = 5 * time.Second
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -306,7 +304,7 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	return newHarnessWithContent(t, contentDir)
+	return newHarnessWithContent(t, contenttest.Dir())
 }
 
 func newHarnessWithContent(t *testing.T, dir string) *harness {

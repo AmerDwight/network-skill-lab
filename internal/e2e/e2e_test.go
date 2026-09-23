@@ -15,6 +15,7 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
@@ -25,9 +26,8 @@ import (
 )
 
 const (
-	testImage  = "nsl/node"
-	contentDir = "../../content"
-	marker     = "echo nsl-e2e-marker"
+	testImage = "nsl/node"
+	marker    = "echo nsl-e2e-marker"
 )
 
 type terminal struct {
@@ -88,7 +88,7 @@ func TestFixtureLabRunsToPassed(t *testing.T) {
 	cli := dockerClient(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	labs, err := content.Load(contentDir)
+	labs, err := content.Load(contenttest.Dir())
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}

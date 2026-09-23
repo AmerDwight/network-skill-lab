@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
@@ -33,7 +34,7 @@ type harness struct {
 
 func newHarness(t *testing.T, fr *fakeRunner) *harness {
 	t.Helper()
-	return newHarnessWithContent(t, fr, "../../content")
+	return newHarnessWithContent(t, fr, contenttest.Dir())
 }
 
 func newHarnessWithContent(t *testing.T, fr *fakeRunner, dir string) *harness {

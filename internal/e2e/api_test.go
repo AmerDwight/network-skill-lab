@@ -20,6 +20,7 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
@@ -47,7 +48,7 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	loaded, err := content.LoadAll(contentDir)
+	loaded, err := content.LoadAll(contenttest.Dir())
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}
