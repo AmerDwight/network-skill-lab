@@ -15,11 +15,14 @@ import (
 //go:embed all:dist
 var assets embed.FS
 
-func NewRouter() *chi.Mux {
+func NewRouter(api http.Handler) *chi.Mux {
 	r := chi.NewRouter()
-	r.Route("/api", func(r chi.Router) {
-		r.NotFound(notFound)
-	})
+	if api == nil {
+		api = http.HandlerFunc(notFound)
+	}
+	r.Handle("/api", api)
+	r.Handle("/api/*", api)
+	r.Handle("/ws/*", api)
 	r.Handle("/*", newSPA(dist()))
 	return r
 }

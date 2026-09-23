@@ -8,9 +8,24 @@ import (
 	"testing/fstest"
 )
 
+func TestRouterMountsAPIBeforeTheSPA(t *testing.T) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("api " + r.URL.Path))
+	})
+	router := NewRouter(api)
+
+	for _, path := range []string{"/api", "/api/labs", "/ws/attempts/01ABC/events"} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got, want := rec.Body.String(), "api "+path; got != want {
+			t.Errorf("body for %s = %q, want %q", path, got, want)
+		}
+	}
+}
+
 func TestRouterAPINotFound(t *testing.T) {
 	rec := httptest.NewRecorder()
-	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/nope", nil))
+	NewRouter(nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/nope", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)

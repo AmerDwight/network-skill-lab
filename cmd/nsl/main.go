@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AmerDwight/network-skill-lab/internal/api"
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/config"
@@ -143,9 +144,18 @@ func serve(args []string) error {
 	checks.Start(ctx)
 	recordings.Start(ctx)
 
+	handler := web.NewRouter(api.New(api.Deps{
+		Attempts: attempts,
+		Labs:     labs,
+		Store:    st,
+		Runner:   provider,
+		Recorder: recordings,
+		Logger:   logger,
+	}))
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           web.NewRouter(),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
