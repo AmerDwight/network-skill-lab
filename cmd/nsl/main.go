@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/config"
+	"github.com/AmerDwight/network-skill-lab/internal/store"
 	"github.com/AmerDwight/network-skill-lab/internal/web"
 )
 
@@ -68,6 +69,17 @@ func serve(args []string) error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 	slog.SetDefault(logger)
+
+	st, err := store.Open(cfg.DataDir)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer func() {
+		if err := st.Close(); err != nil {
+			logger.Error("close store", "error", err)
+		}
+	}()
+	logger.Info("store opened", "path", st.Path())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
