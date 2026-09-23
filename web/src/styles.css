@@ -235,3 +235,267 @@ code {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.attempt {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  grid-template-rows: 1fr auto;
+  grid-template-areas: "panel workspace" "bar bar";
+  height: 100vh;
+}
+
+.panel {
+  grid-area: panel;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.panel__heading {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.panel__ticket {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+
+.panel__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 14px;
+}
+
+.checkpoints {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkpoint {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.checkpoint__icon {
+  color: var(--color-muted);
+}
+
+.checkpoint--pass .checkpoint__icon {
+  color: var(--color-ok);
+}
+
+.checkpoint--fail .checkpoint__icon,
+.checkpoint--error .checkpoint__icon {
+  color: var(--color-error);
+}
+
+.checkpoint__time {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.button--danger {
+  border-color: var(--color-error);
+  background: var(--color-error);
+  color: var(--color-accent-text);
+}
+
+.attempt__workspace {
+  grid-area: workspace;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--color-background);
+}
+
+.attempt__error {
+  margin: auto;
+  text-align: center;
+}
+
+.provisioning {
+  margin: auto;
+  text-align: center;
+}
+
+.provisioning__title {
+  font-size: 16px;
+}
+
+.provisioning__steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.provisioning__step {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.provisioning__step--current {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.workspace__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.workspace__add {
+  font-size: 13px;
+  padding: var(--space-1) var(--space-3);
+}
+
+.workspace__dock {
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal {
+  position: relative;
+  height: 100%;
+  background: #11161c;
+}
+
+.terminal__surface {
+  height: 100%;
+  padding: var(--space-2);
+}
+
+.terminal__notice {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: 13px;
+}
+
+.terminal__notice--error {
+  color: var(--color-error);
+}
+
+.terminal__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(17 22 28 / 75%);
+  color: #e6edf3;
+  font-size: 14px;
+}
+
+.status-bar {
+  grid-area: bar;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 13px;
+}
+
+.status-bar__timer {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-bar__nodes {
+  display: flex;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-bar__node,
+.status-bar__events {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.badge {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+}
+
+.badge--running {
+  border-color: var(--color-ok);
+  color: var(--color-ok);
+}
+
+.badge--error,
+.badge--expired {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-muted);
+}
+
+.dot--open {
+  background: var(--color-ok);
+}
+
+.dot--connecting,
+.dot--reconnecting {
+  background: #d9a441;
+}
+
+.dot--closed,
+.dot--exited {
+  background: var(--color-error);
+}
