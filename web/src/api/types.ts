@@ -62,6 +62,16 @@ export interface Attempt {
   created_at: string;
 }
 
+export interface Result {
+  attempt_id: string;
+  status: AttemptStatus;
+  lab: LabSummary;
+  elapsed_ms: number;
+  command_count: number;
+  checkpoints: AttemptCheckpoint[];
+  solution: string;
+}
+
 export type ProvisioningStep =
   "networks" | "containers" | "bootstrap" | "setup";
 

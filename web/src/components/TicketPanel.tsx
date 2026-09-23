@@ -1,25 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AttemptCheckpoint, CheckpointStatus } from "../api/types";
-
-const checkpointIcons: Record<CheckpointStatus, string> = {
-  pending: "○",
-  pass: "✔",
-  fail: "✘",
-  error: "!",
-};
-
-function passedAtLabel(value: string | null): string | null {
-  if (value === null) {
-    return null;
-  }
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) {
-    return value;
-  }
-  return time.toLocaleTimeString();
-}
+import type { AttemptCheckpoint } from "../api/types";
+import { checkpointIcons, formatTimeOfDay } from "../lib/format";
 
 export interface TicketPanelProps {
   title: string;
@@ -47,7 +30,7 @@ export function TicketPanel({
       <h2 className="panel__heading">{t("attempt.checkpoints")}</h2>
       <ul className="checkpoints">
         {checkpoints.map((checkpoint) => {
-          const passedAt = passedAtLabel(checkpoint.first_passed_at);
+          const passedAt = formatTimeOfDay(checkpoint.first_passed_at);
           return (
             <li
               key={checkpoint.id}

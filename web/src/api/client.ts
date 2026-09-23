@@ -7,6 +7,7 @@ import type {
   Lab,
   LabMode,
   LabSummary,
+  Result,
 } from "./types";
 
 export class ApiError extends Error {
@@ -107,4 +108,9 @@ export async function abandonAttempt(id: string): Promise<Attempt> {
     { method: "POST" },
   );
   return json<Attempt>(response);
+}
+
+export async function getResult(id: string): Promise<Result> {
+  const response = await send(`/api/attempts/${encodeURIComponent(id)}/result`);
+  return json<Result>(response);
 }

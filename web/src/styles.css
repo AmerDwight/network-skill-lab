@@ -499,3 +499,142 @@ code {
 .dot--exited {
   background: var(--color-error);
 }
+
+.result {
+  display: grid;
+  gap: var(--space-5);
+  justify-items: start;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+.result__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.result__title {
+  margin: 0;
+  font-size: 22px;
+}
+
+.result__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: 0;
+}
+
+.result__metric dt {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.result__metric dd {
+  margin: 0;
+}
+
+.result__number {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  font-size: 14px;
+}
+
+.result-table th,
+.result-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.result-table th {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.result-table__icon {
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.result-table__icon--pass {
+  color: var(--color-ok);
+}
+
+.result-table__icon--fail,
+.result-table__icon--error {
+  color: var(--color-error);
+}
+
+.result-table__time {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge--passed {
+  border-color: var(--color-ok);
+  color: var(--color-ok);
+}
+
+.solution {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.solution__summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.markdown {
+  max-width: 72ch;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: 16px;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol {
+  margin: 0 0 var(--space-3);
+}
+
+.markdown code {
+  padding: 0 var(--space-1);
+  border-radius: 4px;
+  background: var(--color-background);
+  font-size: 13px;
+}
+
+.markdown pre {
+  overflow-x: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: #11161c;
+  color: #e6edf3;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
