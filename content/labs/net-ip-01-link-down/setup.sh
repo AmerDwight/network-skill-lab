@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-case "$NSL_NODE" in
-web01)
-	ip link set "$NSL_IFACE" down
-	;;
-*)
+if [ "$NSL_NODE" != "$NSL_NODE_A" ]; then
 	exit 0
-	;;
-esac
+fi
+
+if [ "$NSL_FAULT" = "mtu" ]; then
+	ip link set "$NSL_IFACE" mtu "$NSL_FAULT_MTU"
+fi
+
+ip link set "$NSL_IFACE" down

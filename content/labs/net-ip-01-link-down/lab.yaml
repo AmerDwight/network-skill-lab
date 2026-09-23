@@ -3,29 +3,126 @@ version: 1
 title: { zh: "伺服器連不到對外", en: "Server lost connectivity" }
 topic: net/ip
 level: 2
-modes: [guided, real]
+modes: [tutorial, guided, real]
 environment: container
 estimated_minutes: 10
+related_docs: [net/ip/guide, net/ip/playbook-no-connectivity]
 ticket:
-  zh: "使用者反映 {{node_a}} 無法連到 {{node_b}}（{{ip_b}}）。請找出原因並修復。"
-  en: "Users report {{node_a}} cannot reach {{node_b}} ({{ip_b}}). Find the cause and fix it."
+  zh: "使用者反映 {{node_a}} 無法連到 {{node_b}}（{{ip_b}}）。兩台機器接在同一段 {{subnet}}，{{node_a}} 這側的介面是 {{iface}}。請找出原因並修復。"
+  en: "Users report {{node_a}} cannot reach {{node_b}} ({{ip_b}}). Both machines sit on {{subnet}} and {{node_a}} faces it through {{iface}}. Find the cause and fix it."
 params:
   node_a: { gen: const, value: web01 }
   node_b: { gen: const, value: db01 }
-  subnet: { gen: const, value: 10.0.5.0/24 }
-  ip_a:   { gen: const, value: 10.0.5.10 }
-  ip_b:   { gen: const, value: 10.0.5.20 }
-  iface:  { gen: const, value: eth1 }
+  iface: { gen: const, value: eth1 }
+  fault: { gen: const, value: link }
+  subnet: { gen: cidr, base: 10.0.0.0/8, prefix: 24 }
+  ip_a: { gen: ip_in, subnet: "{{subnet}}", index: 10 }
+  ip_b: { gen: ip_in, subnet: "{{subnet}}", index: 20 }
+cases:
+  - { file: cases/default.yaml, weight: 3 }
+  - { file: cases/wrong-mtu.yaml, weight: 1 }
+precheck: { script: precheck.sh, retries: 3 }
 setup: setup.sh
 checkpoints:
   - id: link-up
-    title: { zh: "{{iface}} 已 UP", en: "{{iface}} is up" }
+    title: { zh: "{{node_a}} 的 {{iface}} 已 UP", en: "{{iface}} is up on {{node_a}}" }
     node: web01
     script: checks/01-link-up.sh
     visible: true
-  - id: ping-peer
-    title: { zh: "web01 可 ping 到 db01", en: "web01 can ping db01" }
+  - id: mtu-ok
+    title: { zh: "{{node_a}} 的 {{iface}} MTU 是 1500", en: "{{iface}} on {{node_a}} has MTU 1500" }
     node: web01
-    script: checks/02-ping-peer.sh
+    script: checks/02-mtu-ok.sh
     visible: true
+  - id: ping-peer
+    title: { zh: "{{node_a}} 可以 ping 到 {{node_b}}", en: "{{node_a}} can ping {{node_b}}" }
+    node: web01
+    script: checks/03-ping-peer.sh
+    visible: true
+    requires: [link-up, mtu-ok]
+tutorial:
+  - checkpoint: link-up
+    instruction:
+      zh: |
+        先看清楚 `{{node_a}}` 上每個介面的狀態，不要急著改設定：
+
+        ```
+        ip -br link
+        ```
+
+        `eth0` 是管理網路，永遠不要動它。要看的是資料介面 `{{iface}}`；狀態欄若是 `DOWN`，代表它被行政性關閉（admin down），連載波都不會有。
+
+        把它拉起來：
+
+        ```
+        ip link set {{iface}} up
+        ```
+
+        再看一次 `ip -br link`，`{{iface}}` 應該變成 `UP`。
+      en: |
+        Start by reading the state of every interface on `{{node_a}}` instead of editing config:
+
+        ```
+        ip -br link
+        ```
+
+        `eth0` is the management network, never touch it. The data interface is `{{iface}}`; a `DOWN` in the state column means it is administratively down, so it has no carrier at all.
+
+        Bring it up:
+
+        ```
+        ip link set {{iface}} up
+        ```
+
+        Run `ip -br link` again and `{{iface}}` should now read `UP`.
+  - checkpoint: mtu-ok
+    instruction:
+      zh: |
+        介面起來之後，確認它的 MTU 沒有被改過。乙太網路的標準值是 1500：
+
+        ```
+        ip link show {{iface}}
+        ```
+
+        輸出第一行的 `mtu <n>` 就是目前值。若小於 1500，大封包會被丟掉而小封包照常通，很容易被誤判成「時好時壞」。
+
+        改回標準值：
+
+        ```
+        ip link set {{iface}} mtu 1500
+        ```
+      en: |
+        With the link up, check that its MTU was not tampered with. The Ethernet default is 1500:
+
+        ```
+        ip link show {{iface}}
+        ```
+
+        The `mtu <n>` on the first line is the current value. Anything below 1500 drops large packets while small ones still get through, which is easily misread as a flaky network.
+
+        Put it back:
+
+        ```
+        ip link set {{iface}} mtu 1500
+        ```
+  - checkpoint: ping-peer
+    instruction:
+      zh: |
+        最後驗證真的通了。位址由 netplan / networkd 管理，介面 UP 之後會自己回來，先確認位址在，再打對端：
+
+        ```
+        ip -br addr show {{iface}}
+        ping -c 3 {{ip_b}}
+        ```
+
+        三個回應都回來、0% packet loss，這題就完成了。
+      en: |
+        Finally, prove the path works. The address is managed by netplan / networkd and comes back on its own once the link is up, so confirm it is there and then reach the peer:
+
+        ```
+        ip -br addr show {{iface}}
+        ping -c 3 {{ip_b}}
+        ```
+
+        Three replies with 0% packet loss and you are done.
 solution: { zh: solution.zh.md, en: solution.en.md }
