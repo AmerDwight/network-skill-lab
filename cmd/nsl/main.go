@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
+	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/config"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
+	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 	"github.com/AmerDwight/network-skill-lab/internal/web"
 	"github.com/docker/docker/client"
@@ -101,9 +103,10 @@ func serve(args []string) error {
 		}
 	}()
 
+	provider := docker.New(cli, docker.Options{Image: cfg.NodeImage})
 	attempts := attempt.New(attempt.Deps{
 		Store:       st,
-		Runner:      docker.New(cli, docker.Options{Image: cfg.NodeImage}),
+		Runner:      provider,
 		Labs:        labs,
 		Image:       cfg.NodeImage,
 		RunnerID:    "docker",
@@ -112,12 +115,33 @@ func serve(args []string) error {
 	})
 	defer attempts.Close()
 
+	checks := checker.New(checker.Deps{
+		Store:    st,
+		Runner:   provider,
+		Attempts: attempts,
+		Interval: cfg.CheckInterval,
+		Logger:   logger,
+	})
+	defer checks.Close()
+
+	recordings := recorder.New(recorder.Deps{
+		Store:    st,
+		Runner:   provider,
+		Attempts: attempts,
+		DataDir:  cfg.DataDir,
+		Logger:   logger,
+	})
+	defer recordings.Close()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := attempts.Recover(ctx); err != nil {
 		return fmt.Errorf("recover attempts: %w", err)
 	}
+
+	checks.Start(ctx)
+	recordings.Start(ctx)
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
