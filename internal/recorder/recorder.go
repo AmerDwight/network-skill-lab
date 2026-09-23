@@ -52,6 +52,11 @@ type loop struct {
 	cancel context.CancelFunc
 	stop   chan struct{}
 	once   sync.Once
+
+	mu      sync.Mutex
+	view    attempt.View
+	offsets map[string]int64
+	final   bool
 }
 
 func New(deps Deps) *Recorder {
@@ -85,6 +90,8 @@ func (r *Recorder) Start(ctx context.Context) {
 	r.mu.Lock()
 	r.cancel = cancel
 	r.mu.Unlock()
+
+	r.attempts.OnBeforeDestroy(r.finalPull)
 
 	r.wg.Add(1)
 	go func() {
@@ -148,8 +155,19 @@ func (r *Recorder) startLoop(ctx context.Context, id string) {
 	go func() {
 		defer r.wg.Done()
 		defer r.forget(id)
-		r.run(loopCtx, id, l.stop)
+		r.run(loopCtx, id, l)
 	}()
+}
+
+func (r *Recorder) finalPull(ctx context.Context, view attempt.View) {
+	r.mu.Lock()
+	l, ok := r.loops[view.Id]
+	r.mu.Unlock()
+	if !ok {
+		return
+	}
+	r.pullAll(ctx, l, true)
+	r.stopLoop(view.Id)
 }
 
 func (r *Recorder) stopLoop(id string) {
@@ -170,33 +188,44 @@ func (r *Recorder) forget(id string) {
 	}
 }
 
-func (r *Recorder) run(ctx context.Context, id string, stop <-chan struct{}) {
+func (r *Recorder) run(ctx context.Context, id string, l *loop) {
 	view, err := r.attempts.Get(ctx, id)
 	if err != nil {
 		r.log.Error("read attempt to record", "attempt", id, "error", err)
 		return
 	}
 
+	l.mu.Lock()
+	l.view = view
+	l.offsets = make(map[string]int64, len(view.Nodes))
+	l.mu.Unlock()
+
 	ticks, stopTicker := r.ticker(r.interval)
 	defer stopTicker()
 
-	offsets := make(map[string]int64, len(view.Nodes))
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-stop:
-			r.pullAll(ctx, view, offsets)
+		case <-l.stop:
+			r.pullAll(ctx, l, true)
 			return
 		case <-ticks:
-			r.pullAll(ctx, view, offsets)
+			r.pullAll(ctx, l, false)
 		}
 	}
 }
 
-func (r *Recorder) pullAll(ctx context.Context, view attempt.View, offsets map[string]int64) {
-	for _, node := range view.Nodes {
-		r.pull(ctx, view, node.Name, offsets)
+func (r *Recorder) pullAll(ctx context.Context, l *loop, final bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.final || l.offsets == nil {
+		return
+	}
+	l.final = final
+
+	for _, node := range l.view.Nodes {
+		r.pull(ctx, l.view, node.Name, l.offsets)
 	}
 	if r.pulled != nil {
 		r.pulled()

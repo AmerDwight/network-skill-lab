@@ -20,9 +20,10 @@ func discardLogger() *slog.Logger {
 }
 
 type fakeRunner struct {
-	mu    sync.Mutex
-	files map[string]string
-	tails map[string][]int64
+	mu        sync.Mutex
+	files     map[string]string
+	tails     map[string][]int64
+	destroyed int
 }
 
 var _ runner.Runner = (*fakeRunner)(nil)
@@ -43,6 +44,12 @@ func (f *fakeRunner) offsets(node string) []int64 {
 	return append([]int64(nil), f.tails[node]...)
 }
 
+func (f *fakeRunner) destroys() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.destroyed
+}
+
 func (f *fakeRunner) Exec(_ context.Context, _ runner.SandboxID, node string, cmd []string, _ runner.ExecOptions) (runner.ExecResult, error) {
 	if len(cmd) != 4 || cmd[0] != "tail" || cmd[1] != "-c" || cmd[3] != commandLogPath {
 		return runner.ExecResult{}, errors.New("unexpected command " + strings.Join(cmd, " "))
@@ -54,6 +61,9 @@ func (f *fakeRunner) Exec(_ context.Context, _ runner.SandboxID, node string, cm
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.destroyed > 0 {
+		return runner.ExecResult{}, errors.New("sandbox is gone")
+	}
 	f.tails[node] = append(f.tails[node], start)
 	content, ok := f.files[node]
 	if !ok {
@@ -73,7 +83,12 @@ func (f *fakeRunner) Provision(_ context.Context, spec runner.SandboxSpec) (runn
 	return runner.SandboxID(spec.AttemptID), nil
 }
 
-func (f *fakeRunner) Destroy(_ context.Context, _ runner.SandboxID) error { return nil }
+func (f *fakeRunner) Destroy(_ context.Context, _ runner.SandboxID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.destroyed++
+	return nil
+}
 
 func (f *fakeRunner) GC(_ context.Context) error { return nil }
 

@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	probeCommand  = "echo nsl-api-probe\r"
+	probeCommand  = "ip -br link show eth1\r"
 	linkUpCommand = "sudo ip link set eth1 up\r"
 )
 
@@ -202,19 +202,10 @@ func TestAPIDrivesFixtureLabToPassed(t *testing.T) {
 	if err := term.Write(writeCtx, websocket.MessageBinary, []byte(probeCommand)); err != nil {
 		t.Fatalf("send the probe command: %v", err)
 	}
-	waitFor(t, "the probe command to reach the command log", 30*time.Second, func() bool {
-		count, err := s.store.CommandLog.CountByAttempt(context.WithoutCancel(t.Context()), id)
-		if err != nil {
-			t.Fatalf("count command log: %v", err)
-		}
-		return count > 0
-	})
-	t.Logf("probe command recorded at %s", time.Since(start).Round(time.Millisecond))
-
 	if err := term.Write(writeCtx, websocket.MessageBinary, []byte(linkUpCommand)); err != nil {
 		t.Fatalf("send the fix: %v", err)
 	}
-	t.Logf("fix sent at %s", time.Since(start).Round(time.Millisecond))
+	t.Logf("probe and fix sent at %s", time.Since(start).Round(time.Millisecond))
 
 	passed := map[string]bool{}
 	waitForEvent(t, messages, 60*time.Second, func(message map[string]any) bool {
@@ -254,8 +245,8 @@ func TestAPIDrivesFixtureLabToPassed(t *testing.T) {
 	if result["_status"] != float64(http.StatusOK) {
 		t.Fatalf("result: %v", result)
 	}
-	if count := result["command_count"].(float64); count < 1 {
-		t.Errorf("command_count = %v, want at least 1", count)
+	if count := result["command_count"].(float64); count < 2 {
+		t.Errorf("command_count = %v, want at least 2", count)
 	}
 	if solution := result["solution"].(string); solution == "" {
 		t.Error("solution is empty")

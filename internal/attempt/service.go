@@ -24,6 +24,7 @@ const (
 	provisionTimeout    = 3 * time.Minute
 	destroyTimeout      = 2 * time.Minute
 	storeTimeout        = 10 * time.Second
+	defaultHookTimeout  = 5 * time.Second
 )
 
 var (
@@ -43,6 +44,7 @@ type Deps struct {
 	RunnerID     string
 	IdleTimeout  time.Duration
 	TickInterval time.Duration
+	HookTimeout  time.Duration
 	Now          func() time.Time
 	After        func(time.Duration) <-chan time.Time
 	Logger       *slog.Logger
@@ -56,6 +58,7 @@ type Service struct {
 	runnerID     string
 	idleTimeout  time.Duration
 	tickInterval time.Duration
+	hookTimeout  time.Duration
 	now          func() time.Time
 	after        func(time.Duration) <-chan time.Time
 	log          *slog.Logger
@@ -68,7 +71,12 @@ type Service struct {
 
 	mu      sync.Mutex
 	tracked map[string]*tracker
+
+	hooksMu sync.Mutex
+	hooks   []BeforeDestroyFunc
 }
+
+type BeforeDestroyFunc func(ctx context.Context, v View)
 
 type tracker struct {
 	conns int
@@ -99,6 +107,9 @@ func New(deps Deps) *Service {
 	if deps.TickInterval <= 0 {
 		deps.TickInterval = defaultTickInterval
 	}
+	if deps.HookTimeout <= 0 {
+		deps.HookTimeout = defaultHookTimeout
+	}
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
@@ -118,6 +129,7 @@ func New(deps Deps) *Service {
 		runnerID:     deps.RunnerID,
 		idleTimeout:  deps.IdleTimeout,
 		tickInterval: deps.TickInterval,
+		hookTimeout:  deps.HookTimeout,
 		now:          deps.Now,
 		after:        deps.After,
 		log:          deps.Logger,
@@ -140,6 +152,15 @@ func (s *Service) Close() {
 		s.wg.Wait()
 		s.bus.close()
 	})
+}
+
+func (s *Service) OnBeforeDestroy(fn BeforeDestroyFunc) {
+	if fn == nil {
+		return
+	}
+	s.hooksMu.Lock()
+	defer s.hooksMu.Unlock()
+	s.hooks = append(s.hooks, fn)
 }
 
 func (s *Service) Subscribe(id string) (<-chan Event, func()) {
@@ -484,9 +505,51 @@ func (s *Service) end(ctx context.Context, id, status, errorMessage string, from
 	att.ElapsedMS = elapsed.Milliseconds()
 
 	s.untrack(id)
+	s.runBeforeDestroy(ctx, att)
 	s.bus.publish(statusEvent(att, now))
 	s.destroyAsync(att.ID, att.SandboxID)
 	return att, nil
+}
+
+func (s *Service) runBeforeDestroy(ctx context.Context, att store.Attempt) {
+	s.hooksMu.Lock()
+	hooks := slices.Clone(s.hooks)
+	s.hooksMu.Unlock()
+	if len(hooks) == 0 {
+		return
+	}
+
+	hookCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.hookTimeout)
+	defer cancel()
+
+	view, err := s.view(hookCtx, att)
+	if err != nil {
+		s.log.Error("build the view for the before-destroy hooks", "attempt", att.ID, "error", err)
+		return
+	}
+
+	for _, hook := range hooks {
+		s.runHook(hookCtx, hook, view)
+	}
+}
+
+func (s *Service) runHook(ctx context.Context, hook BeforeDestroyFunc, view View) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				s.log.Error("before-destroy hook panicked", "attempt", view.Id, "panic", r)
+			}
+		}()
+		hook(ctx, view)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		s.log.Warn("before-destroy hook did not finish before the deadline", "attempt", view.Id)
+	}
 }
 
 func (s *Service) destroyAsync(id, sandbox string) {
