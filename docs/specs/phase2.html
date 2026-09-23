@@ -1,0 +1,325 @@
+<title>Phase 2 內容系統</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8;--surface:#ffffff;--ink:#17222b;--muted:#5b6b76;--line:#d9e0e4;
+  --accent:#0f6e6c;--accent-ink:#ffffff;--accent-soft:#dff0ee;
+  --warn-soft:#fbeedb;--warn:#8a5a0b;--pending-soft:#e9e6f7;--pending:#4d3f9e;
+  --code-bg:#eef2f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+    --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+    --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+    --code-bg:#0b1014;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+  --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+  --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+  --code-bg:#0b1014;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;}
+.wrap{max-width:900px;margin:0 auto;padding-block:40px 80px;padding-inline:20px;}
+h1,h2,h3,h4{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:30px;font-weight:700}
+h2{font-size:20px;font-weight:700;margin-top:56px;padding-bottom:8px;border-bottom:2px solid var(--line);display:flex;align-items:baseline;gap:12px}
+h2 .n{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);letter-spacing:.08em}
+h3{font-size:16px;font-weight:700;margin-top:28px}
+h4{font-size:14.5px;font-weight:700;margin-top:18px}
+p{margin:12px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;color:var(--muted);font-size:13px;margin-top:14px}
+.meta b{color:var(--ink);font-weight:500}
+.lede{font-size:16px;color:var(--muted);margin-top:18px;max-width:66ch}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px}
+code{background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;line-height:1.55;margin:12px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+.tbl{overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;background:var(--surface)}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:2px 8px;border-radius:999px;letter-spacing:.04em;vertical-align:middle}
+.tag.risk{background:var(--accent-soft);color:var(--accent)}
+.tag.pending{background:var(--pending-soft);color:var(--pending)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-top:22px}
+.card header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;margin-bottom:6px}
+.card header h3{margin:0}
+.card header .id{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-weight:500}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;margin-top:10px}
+.grid>div>b{display:block;font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;margin-bottom:2px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.decision{border-left:3px solid var(--pending);padding:2px 0 2px 16px;margin:18px 0}
+.decision b.q{display:block}
+.decision .why{color:var(--muted);font-size:14px}
+.callout{background:var(--accent-soft);border-radius:8px;padding:16px 20px;margin:20px 0}
+.callout p{margin:6px 0}
+.approve{margin-top:48px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--surface)}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">network-skill-lab · spec</div>
+<h1>Phase 2 內容系統</h1>
+<div class="meta">
+  <span>類型 <b>正式開發（三層模型）</b></span>
+  <span>版本 <b>v1 草案</b></span>
+  <span>日期 <b>2026-09-23</b></span>
+  <span>撰寫 <b>Fable 5.1（planner）</b></span>
+  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+</div>
+<p class="lede">Phase 1 證明引擎能跑完一題。Phase 2 把引擎變成「不改程式碼就能長內容」的系統：文件、學習路徑、三種模式、隨機化參數、自檢、lint，以及五個各自驗證一個擴充點的 fixture lab。這個 phase 的產品是 DESIGN.md §3.9 那張擴充點表，lab 只是證據。</p>
+
+<h2><span class="n">01</span>目標與完成定義</h2>
+<ol>
+<li><b>不改程式碼新增內容。</b>驗收時 planner 現場寫一個最小的新 lab（只有 lab.yaml、topology.yaml、setup、一個 check）放進 <code>content/</code>，重啟 <code>nsl serve</code> 後它出現在列表並可跑完。</li>
+<li><b>三種模式都實測。</b>五個 fixture lab 各自宣告的 <code>modes</code> 都能從瀏覽器跑完：tutorial 逐步自動前進；guided 即時打勾；real 只有工單、按「提交」才揭露、未全過可繼續。</li>
+<li><b>隨機化成立。</b>同一個 lab 連開三次，params 與 case 不同，precheck 皆通過；故意讓 precheck 失敗時最多重生 3 次後進 <code>error</code> 並顯示原因。</li>
+<li><b>lint 守門。</b><code>nsl content lint</code> 對一份故意弄壞的內容目錄一次列出所有錯誤，exit 非 0；CI 對 <code>content/</code> 跑 lint。</li>
+<li><b>文件與路徑可用。</b>docs 頁與練習頁的文件面板顯示雙語 markdown；tracks 頁列出步驟與進度，完成的 lab 自動打勾，文件可標記已讀。</li>
+<li><b>k3s 可用。</b>兩個 k3s lab 在瀏覽器跑完，provisioning 進度顯示到 Node Ready，冷啟動 &lt; 30 秒。</li>
+<li>Phase 1 的驗收條目全部維持通過（回歸）；issue #24 的 flaky 測試修掉。</li>
+</ol>
+
+<h2><span class="n">02</span>範圍</h2>
+<div class="tbl"><table>
+<tr><th>在範圍內</th><th>不在範圍內</th></tr>
+<tr><td>
+<ul>
+<li>Doc 原語：<code>content/docs/</code> markdown 雙語、<code>topics.yaml</code>、<code>tracks/*.yaml</code>（§05）</li>
+<li>lab.yaml 全規格：params 產生器、cases、precheck、<code>visible: false</code>、<code>requires</code>、<code>tutorial</code>、<code>related_docs</code>、<code>internet</code>（§05）</li>
+<li>三種模式的引擎語意與 API：submit 流程、real 模式的隱藏偵測（§06）</li>
+<li><code>nsl content lint</code> 子指令 + CI job（§07）</li>
+<li>k3s role 選項與 k3s lab 的 provisioning 進度（§08）</li>
+<li>Web：主題樹列表、lab 詳情頁、docs 頁、tracks 頁、練習頁的文件面板、tutorial 與 real 模式 UI（§09）</li>
+<li>五個 fixture lab、四份 guide、兩條 track（§10）</li>
+<li>資料模型：<code>progress</code> 表、<code>attempts.submit_count</code>（§11）</li>
+</ul>
+</td><td>
+<ul>
+<li>登入、多帳號、歷史頁、錄影回放 → Phase 3</li>
+<li>面試模式、時限、即時觀看 → Phase 5</li>
+<li>VM provider、遠端 runner → Phase 4</li>
+<li>提示系統、計分 → 不做（D8）</li>
+<li>L5 複合題（多節點多故障）→ 引擎已支援，內容留給團隊</li>
+<li>containerlab / FRR 網路裝置 → Phase 5</li>
+</ul>
+</td></tr>
+</table></div>
+
+<h2><span class="n">03</span>待批的提案</h2>
+<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+
+<div class="decision"><b class="q">P1 precheck 失敗的重生 = 銷毀沙箱、重新選 case 與 params、重新 provision，最多 3 次</b>
+<div class="why">理由：D10 原文。Ubuntu 雙節點 provision 只要 2.7 秒，重來比「原地重跑 setup」簡單且乾淨；k3s lab 若 precheck 失敗代價較高，但 k3s 題的 params 通常不影響拓樸，作者應讓 precheck 幾乎不會失敗。</div></div>
+
+<div class="decision"><b class="q">P2 進度存資料庫：<code>progress(user_id, kind, ref, completed_at)</code></b>
+lab 的完成由 passed 的 attempt 自動寫入；doc 由使用者按「標記已讀」寫入。track 頁的進度純粹由這張表推算。
+<div class="why">理由：Phase 3 有多帳號，進度必須跟 user 走，不能放 localStorage。</div></div>
+
+<div class="decision"><b class="q">P3 real 模式的提交語意</b>
+按「提交」→ 立刻跑一輪完整 checker → 全過則 <code>passed</code>；未全過則揭露本次結果（哪些過、哪些沒過，不含隱藏 checkpoint 的描述），狀態回 <code>running</code>，計時不停，可再提交，次數不限，<code>submit_count</code> 記錄。背景偵測在 real 模式照常跑但不廣播，用來記錄 <code>first_passed_at</code>。
+<div class="why">理由：§3.3 的解讀，加上「不限次數」避免練習者被卡死。面試模式的限制留 Phase 5。</div></div>
+
+<div class="decision"><b class="q">P4 k3s 節點預設關閉 traefik 與 metrics-server</b>
+topology 的 node 可寫 <code>k3s: { disable: [...] }</code> 覆寫；預設 <code>[traefik, metrics-server]</code>。ingress 主題的 lab 自己把 traefik 打開。
+<div class="why">理由：Phase 0 量到 helm-install traefik 讓系統 Pod 就緒多等 20 秒，且吃記憶體；大多數 k3s 題不需要它。</div></div>
+
+<div class="decision"><b class="q">P5 五個 fixture lab 各驗一個擴充點</b>
+<div class="tbl"><table>
+<tr><th>lab</th><th>主題 / 等級</th><th>驗證的擴充點</th><th>modes</th></tr>
+<tr><td><code>net-ip-01-link-down</code>（既有，升級）</td><td>net/ip · L1–L3</td><td>params 產生器（cidr、ip_in）、cases（加 <code>wrong-mtu</code>）、precheck、tutorial 步驟、related_docs</td><td>tutorial, guided, real</td></tr>
+<tr><td><code>net-route-01-wrong-gateway</code></td><td>net/ip · L3</td><td>三節點（web、gw、db）、gw 節點 <code>ip_forward</code>、<code>visible: false</code> 的隱藏 checkpoint、<code>requires</code></td><td>guided, real</td></tr>
+<tr><td><code>net-dns-01-resolved</code></td><td>net/dns · L2</td><td>resolved / netplan DNS 設定壞掉、<code>internet: false</code>、<code>choice</code> 與 <code>int</code> 產生器</td><td>guided, real</td></tr>
+<tr><td><code>k3s-pod-01-crashloop</code></td><td>k3s/pods · L2</td><td>單節點 <code>k3s-server</code> role、Pod 的 <code>kubectl</code> 類 checkpoint、k3s 進度顯示</td><td>tutorial, guided</td></tr>
+<tr><td><code>k3s-svc-01-selector</code></td><td>k3s/service · L3</td><td>server + agent 雙節點、跨節點 Service、隨機 namespace / label 參數</td><td>guided, real</td></tr>
+</table></div>
+<div class="why">理由：架構優先於內容。每個 lab 存在的理由是覆蓋 §3.9 的一列，不是湊數。</div></div>
+
+<div class="decision"><b class="q">P6 lint 是純內容檢查，不碰 Docker，CI 一定跑</b>
+規則清單見 §07。腳本只檢查存在、可執行、<code>bash -n</code> 語法；不執行。
+<div class="why">理由：GitHub runner 沒有 privileged 容器；執行類的驗證由 fixture lab 的整合測試負責。</div></div>
+
+<div class="decision"><b class="q">P7 內容由 Opus 寫、Haiku 審，跟程式碼同一流程；每個 lab 一個 PR</b>
+<div class="why">理由：setup 與 check 腳本是會跑在 root 的 bash，品質要求跟程式碼一樣。文件的中文由 Opus 產出後 planner 抽查。</div></div>
+
+<div class="decision"><b class="q">P8 隱藏 checkpoint 只在結果頁出現，任何模式的練習頁都不顯示；tutorial 模式不允許有隱藏 checkpoint（lint 擋）</b>
+<div class="why">理由：D9 原文；tutorial 的每步對應一個 checkpoint，隱藏會讓步驟斷掉。</div></div>
+
+<div class="decision"><b class="q">P9 lab 列表改為主題樹分組，lab 詳情頁單獨一頁（說明、節點、相關文件、選模式開始）</b>
+<div class="why">理由：五個 lab 加上團隊之後的內容，平鋪列表會失控；模式選擇需要一個落點。</div></div>
+
+<div class="decision"><b class="q">P10 params 產生器的隨機源：每個 attempt 一個 64 位元 seed，存進 <code>attempts.params_json</code> 旁的 <code>seed</code> 欄位</b>
+<div class="why">理由：可重現。之後面試模式或除錯時能用同一個 seed 重建同一題。</div></div>
+
+<h2><span class="n">04</span>架構變更</h2>
+<pre><code>internal/
+  content/      + docs, topics, tracks 型別與載入；params 產生器；cases；lint 規則集（純函式）
+  attempt/      + mode 語意（tutorial 步驟、real 隱藏）、submit、precheck 重生迴圈、progress 寫入
+  checker/      + real 模式「偵測但不廣播」、submit 觸發的即時一輪
+  provider/docker/  + k3s role 選項（disable）、Node Ready 等待與進度事件
+  store/        + progress 表、attempts.submit_count / seed / case_id 使用
+  api/          + docs、topics、tracks、progress、submit、lab 詳情
+  lint/         `nsl content lint` 的 CLI 包裝（呼叫 content 的規則集，輸出格式固定）
+cmd/nsl/        + `content lint [dir]` 子指令
+web/            + 主題樹、lab 詳情、docs 頁、tracks 頁、文件面板、tutorial / real UI
+content/        + docs/、topics.yaml、tracks/、4 個新 lab
+.github/        + lint job 對 content/ 跑 `nsl content lint`</code></pre>
+<p>依賴方向不變。lint 規則放在 <code>content</code> 套件裡是為了讓 <code>nsl serve</code> 的啟動驗證與 CLI 用同一套規則，不會出現「lint 過了但 serve 拒絕」的情況。</p>
+
+<h2><span class="n">05</span>內容格式：Phase 2 全規格</h2>
+<p>以 DESIGN.md §3.5 到 §3.8 為準，這裡只寫 Phase 1 子集之外要新增或明確化的部分。</p>
+<h4>params 產生器</h4>
+<div class="tbl"><table>
+<tr><th>gen</th><th>欄位</th><th>語意</th></tr>
+<tr><td><code>const</code></td><td><code>value</code></td><td>固定值（既有）</td></tr>
+<tr><td><code>cidr</code></td><td><code>base</code>、<code>prefix</code></td><td>在 base 範圍內隨機取一個 /prefix 子網，例如 base 10.0.0.0/8、prefix 24 → 10.173.42.0/24；不與 mgmt 網段（172.16.0.0/12 由 Docker 用）重疊</td></tr>
+<tr><td><code>ip_in</code></td><td><code>subnet</code>、<code>index</code> 或 <code>range: [lo, hi]</code></td><td>subnet 內第 index 個位址，或 range 內隨機一個，排除網路與廣播位址；同一 subnet 內不同 param 不重複</td></tr>
+<tr><td><code>choice</code></td><td><code>of: [...]</code></td><td>等機率選一</td></tr>
+<tr><td><code>int</code></td><td><code>min</code>、<code>max</code></td><td>閉區間整數</td></tr>
+</table></div>
+<p>求值依宣告順序，後者可用 <code>{{}}</code> 引用前者（既有規則）。所有隨機都來自 attempt 的 seed。</p>
+<h4>cases 與 precheck</h4>
+<pre><code>cases:
+  - { file: cases/default.yaml, weight: 3 }
+  - { file: cases/wrong-mtu.yaml, weight: 1 }
+# cases/wrong-mtu.yaml
+params: { fault: { gen: const, value: mtu } }   # 覆寫或新增 params（同名覆寫）
+setup_env: { NSL_FAULT_MTU: "1200" }            # 額外注入 setup 與 checks 的環境變數
+precheck: { script: precheck.sh, retries: 3 }    # 在 setup 之後、running 之前於每個 node 執行；任一 node 非 0 = 失敗</code></pre>
+<p>沒有 <code>cases</code> 的 lab 視為只有一個隱含的 default case。<code>case_id</code> 寫入 attempts。</p>
+<h4>checkpoints 與 tutorial</h4>
+<pre><code>checkpoints:
+  - id: gw-forwarding
+    title: { zh: "...", en: "..." }
+    node: gw
+    script: checks/02-forwarding.sh
+    visible: false          # 只在結果頁出現（P8）
+    requires: [link-up]     # 只影響顯示順序與 tutorial 步驟順序
+tutorial:                   # mode 含 tutorial 時必填；每個 visible checkpoint 恰好一步，順序須符合 requires
+  - checkpoint: link-up
+    instruction: { zh: "markdown", en: "markdown" }</code></pre>
+<h4>其他新欄位</h4>
+<ul>
+<li><code>related_docs: [net/ip/guide, net/ip/playbook-no-connectivity]</code>：練習頁文件面板的分頁，必須存在。</li>
+<li><code>internet: false</code>：mgmt 網路改為 <code>--internal</code>，節點無法對外；DNS 上游仍是 Docker embedded DNS，但外部名稱會失敗（Phase 0 觀察到的行為）。</li>
+<li>topology node：<code>k3s: { disable: [traefik, metrics-server] }</code>（P4），只對 k3s-server 有效。</li>
+</ul>
+<h4>docs、topics、tracks</h4>
+<pre><code>content/docs/net/ip/guide.zh.md            # id = net/ip/guide；同 id 必須 zh、en 都有
+content/docs/net/ip/guide.en.md
+content/topics.yaml                        # 樹狀，DESIGN.md §3.8；每個 lab.topic 與 doc 的目錄必須在樹中
+content/tracks/network-basics.yaml         # DESIGN.md §3.7；step 的 doc / lab 必須存在，lab 的 mode 必須在其 modes 內</code></pre>
+<p>docs 的 markdown 第一個 <code>#</code> 標題作為文件標題；front matter 不用。</p>
+
+<h2><span class="n">06</span>模式語意</h2>
+<div class="tbl"><table>
+<tr><th>面向</th><th>tutorial</th><th>guided</th><th>real</th></tr>
+<tr><td>練習頁顯示</td><td>步驟清單：目前步驟的 instruction markdown + 該 checkpoint；已完成步驟打勾</td><td>工單 + 全部 visible checkpoint 即時狀態</td><td>只有工單 + 「提交」按鈕 + 提交次數</td></tr>
+<tr><td>checker 廣播</td><td>是</td><td>是</td><td>否（只寫 DB）</td></tr>
+<tr><td>結束條件</td><td>同一輪全部 visible checkpoint 通過（隱藏不允許）</td><td>同一輪全部 checkpoint 通過（含隱藏）</td><td>提交時那一輪全部通過（含隱藏）</td></tr>
+<tr><td>提交</td><td>無</td><td>無</td><td><code>POST /api/attempts/{id}/submit</code>：立即跑一輪，回傳 visible checkpoint 的結果與 <code>hidden_failed</code> 數量；全過 → passed</td></tr>
+<tr><td>結果頁</td><td colspan="3">相同：全部 checkpoint（含隱藏）的最終狀態與 first_passed_at、提交次數、解答</td></tr>
+</table></div>
+<p>tutorial 的「目前步驟」= 第一個未通過的步驟；使用者做完前一步，checker 打勾後 UI 自動捲到下一步。步驟不可跳過，但 checker 不管順序，做完後面的步驟一樣會打勾。</p>
+
+<h2><span class="n">07</span>lint 規則</h2>
+<p><code>nsl content lint [dir]</code>（預設 <code>NSL_CONTENT_DIR</code>）。輸出每行 <code>&lt;path&gt;: &lt;rule&gt;: &lt;message&gt;</code>，全部列完才 exit 1；<code>--json</code> 給 CI 用。規則集 = Phase 1 的 §05 全部 + 以下：</p>
+<ul>
+<li>params：產生器名稱與欄位合法；<code>cidr</code> 的 prefix 大於 base 的 prefix；<code>ip_in</code> 的 subnet 是已定義 param 或字面 CIDR；引用只能往前。</li>
+<li>cases：檔案存在、weight 正整數、覆寫的 params 型別合法；至少一個 case 或零個。</li>
+<li>precheck：檔案存在、可執行、<code>bash -n</code> 通過；retries 1 到 5。</li>
+<li>checkpoints：<code>requires</code> 指向存在的 id 且無環；tutorial 模式下沒有 <code>visible: false</code>；<code>tutorial</code> 步驟與 visible checkpoint 一一對應且順序符合 requires。</li>
+<li>related_docs 存在且 zh、en 皆在；topic 在 topics 樹中；tracks 的每一步存在且 mode 合法。</li>
+<li>所有腳本 <code>bash -n</code> 通過；checks 內不得出現 <code>ip link set</code>、<code>systemctl</code>、<code>rm </code>、<code>&gt;</code> 重導（啟發式，警告等級）。</li>
+<li>topology：k3s 選項只出現在 k3s-server；<code>internet</code> 為布林。</li>
+</ul>
+
+<h2><span class="n">08</span>k3s 支援</h2>
+<ul>
+<li>provider 對 k3s-server 依 <code>disable</code> 寫進 <code>/etc/rancher/k3s/config.yaml</code>（bootstrap 已讀 <code>NSL_K3S_DISABLE</code> 環境變數，image 端小改）。</li>
+<li>provisioning 進度加一步 <code>k3s</code>：provider 在 bootstrap 後輪詢 <code>kubectl get nodes</code> 直到所有 k3s 節點 Ready（上限 90 秒），再跑 setup。這一步只有 k3s lab 才會出現。</li>
+<li>k3s lab 的 setup 可以用 <code>kubectl</code>（<code>KUBECONFIG</code> 已由 bootstrap 寫進 profile；setup 以 root 執行時需 <code>export KUBECONFIG=/etc/rancher/k3s/k3s.yaml</code>，引擎統一注入這個環境變數給 k3s-server 節點）。</li>
+<li>整合測試新增 k3s 單節點 lab 的完整流程（build tag integration，本機跑）。</li>
+</ul>
+
+<h2><span class="n">09</span>API 與 Web</h2>
+<h4>API 新增</h4>
+<div class="tbl"><table>
+<tr><th>方法與路徑</th><th>用途</th></tr>
+<tr><td><code>GET /api/topics</code></td><td>主題樹，每個節點附 lab 數與 doc 數</td></tr>
+<tr><td><code>GET /api/labs?topic=net/ip</code></td><td>既有端點加篩選；回應加 <code>related_docs</code>、<code>has_hidden_checkpoints</code>、<code>modes</code></td></tr>
+<tr><td><code>GET /api/docs</code>、<code>GET /api/docs/{id...}?lang=</code></td><td>清單與內容（markdown 字串 + 標題）</td></tr>
+<tr><td><code>GET /api/tracks</code>、<code>GET /api/tracks/{id}</code></td><td>清單與步驟；每步附 <code>completed</code></td></tr>
+<tr><td><code>POST /api/progress</code> <code>{kind: doc, ref}</code></td><td>標記文件已讀（lab 由 attempt passed 自動寫）</td></tr>
+<tr><td><code>POST /api/attempts/{id}/submit</code></td><td>real 模式提交，回 <code>{ passed: bool, checkpoints: [visible 的結果], hidden_failed: n, submit_count }</code></td></tr>
+<tr><td><code>GET /api/attempts/{id}</code></td><td>加 <code>mode</code> 相關欄位：<code>tutorial_steps</code>（tutorial）、<code>submit_count</code>（real）；real 模式不回 checkpoints</td></tr>
+<tr><td>events WS</td><td>provisioning step 加 <code>k3s</code> 與 <code>precheck</code>（含 <code>attempt: n</code>）；real 模式不送 checkpoint 事件</td></tr>
+</table></div>
+<h4>Web</h4>
+<ul>
+<li><code>/</code>：主題樹側欄 + 該主題的 lab 卡片；進行中 attempt 的 banner 不變。</li>
+<li><code>/labs/{id}</code>：說明、節點與 role、相關文件連結、modes 按鈕（有進行中 attempt 時禁用）。</li>
+<li><code>/docs/{id...}</code>：markdown 渲染、語言跟隨 UI、「標記已讀」。</li>
+<li><code>/tracks</code>、<code>/tracks/{id}</code>：步驟列表、完成打勾、下一步按鈕。</li>
+<li>練習頁：左面板加「文件」分頁（related_docs，markdown）；tutorial 模式左面板換成步驟清單；real 模式左面板只剩工單、提交按鈕與提交次數，提交後顯示本次結果摘要 5 秒。</li>
+<li>provisioning 面板加 k3s 與 precheck 步驟（precheck 重試時顯示第 n 次）。</li>
+<li>不做的：搜尋、標籤篩選、離線快取。</li>
+</ul>
+
+<h2><span class="n">10</span>內容交付</h2>
+<div class="tbl"><table>
+<tr><th>類型</th><th>項目</th></tr>
+<tr><td>labs</td><td>P5 的五個；每個含 solution 雙語、必要的 docs 連結、至少一個非 default case（net-ip-01、net-dns-01）</td></tr>
+<tr><td>docs</td><td><code>net/ip/guide</code>、<code>net/ip/playbook-no-connectivity</code>、<code>net/dns/guide</code>、<code>k3s/pods/guide</code>；各 zh、en；每篇 60 到 150 行，指令為主，少講概念</td></tr>
+<tr><td>topics</td><td>DESIGN.md §3.8 的樹</td></tr>
+<tr><td>tracks</td><td><code>network-basics</code>（guide → net-ip-01 tutorial → net-ip-01 guided → playbook → net-route-01 real → net-dns-01 guided）、<code>k3s-troubleshooting</code>（k3s/pods/guide → k3s-pod-01 tutorial → k3s-svc-01 guided）</td></tr>
+</table></div>
+
+<h2><span class="n">11</span>資料模型</h2>
+<ul>
+<li>migration 0002：<code>progress(user_id, kind CHECK IN ('doc','lab'), ref, completed_at, PRIMARY KEY(user_id, kind, ref))</code>；<code>attempts</code> 加 <code>submit_count INTEGER NOT NULL DEFAULT 0</code>、<code>seed INTEGER</code>。</li>
+<li><code>attempts.case_id</code>（既有欄位）開始使用；<code>params_json</code> 存最終求值後的 params。</li>
+</ul>
+
+<h2><span class="n">12</span>Task 拆分</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>Task</th><th>驗收</th></tr>
+<tr><td>T1</td><td>引擎：params 產生器、cases、seed、precheck 重生迴圈、隱藏 checkpoint、requires；migration 0002；修 #24</td><td>單元測試每個產生器與規則；整合測試 precheck 失敗重生到 error；#24 連跑 50 次穩定</td></tr>
+<tr><td>T2</td><td>lint：規則集 + <code>nsl content lint</code> + CI job；docs / topics / tracks 載入與驗證</td><td>對故意弄壞的內容目錄列出全部錯誤；CI 對 content/ 綠燈</td></tr>
+<tr><td>T3</td><td>模式：tutorial 與 real 的 attempt / checker 語意、submit、progress 寫入；API 新端點（§09）</td><td>httptest 覆蓋 submit 的三種結果、real 不送 checkpoint 事件、tutorial_steps；progress 自動寫入</td></tr>
+<tr><td>T4</td><td>k3s：role 選項、Node Ready 進度、KUBECONFIG 注入、image bootstrap 小改；k3s 單節點整合測試</td><td>整合測試單節點 k3s lab 從建立到 passed；冷啟動時間記錄</td></tr>
+<tr><td>T5</td><td>Web：主題樹列表、lab 詳情頁、docs 頁、tracks 頁</td><td>vitest；mock server 擴充；手動走過四頁</td></tr>
+<tr><td>T6</td><td>Web：練習頁文件面板、tutorial UI、real UI（提交）、provisioning 新步驟</td><td>vitest；mock 走三種模式</td></tr>
+<tr><td>T7</td><td>內容：升級 net-ip-01（params、cases、precheck、tutorial、docs）+ net/ip 兩篇文件 + topics.yaml</td><td>lint 綠；三種模式整合測試</td></tr>
+<tr><td>T8</td><td>內容：net-route-01、net-dns-01 + net/dns guide</td><td>lint 綠；guided 與 real 整合測試各一</td></tr>
+<tr><td>T9</td><td>內容：k3s-pod-01、k3s-svc-01 + k3s/pods guide；兩條 track</td><td>lint 綠；k3s 雙節點整合測試</td></tr>
+<tr><td>T10</td><td>驗收：planner 跑 §01 七條，含現場新增一個 lab；回寫 DESIGN.md 與 PHASE2-RESULTS.md</td><td>§01 全部成立</td></tr>
+</table></div>
+<p>T1、T2 可平行；T3 等 T1；T4 等 T1；T5 等 T2 的 API 形狀（先以契約開工）；T6 等 T3；T7 等 T1、T2；T8、T9 等 T7 的範本。預估比 Phase 1 多一半的工作量。</p>
+
+<h2><span class="n">13</span>風險</h2>
+<ul>
+<li><b>k3s lab 的 provisioning 時間</b>：Phase 0 量到 16 到 21 秒到 Ready；關 traefik 後預期更短，但 WSL 記憶體吃緊時會變慢。T4 先量再定 UI 的等待上限。</li>
+<li><b>隨機參數與 checks 的耦合</b>：作者容易在 check 腳本寫死位址。lint 加啟發式警告（腳本內出現 <code>10.0.</code> 這類字面 IP），不擋。</li>
+<li><b>real 模式的背景偵測與提交同時跑</b>：兩者共用 checker 的 sweep，需要互斥；T3 的單元測試要涵蓋。</li>
+<li><b>內容量</b>：四篇雙語文件與五個 lab 是本 phase 最花時間的部分，但不影響引擎驗收；若時間不夠，先砍 net-dns-01 與 k3s-svc-01，擴充點覆蓋改由測試 fixture 補。</li>
+</ul>
+
+<div class="approve">
+<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
+<ol>
+<li>P1 到 P10 有沒有要改的？</li>
+<li>§02 範圍與 P5 的五個 lab 主題有沒有要換的？例如你更想要 netplan 或 iptables 的題。</li>
+<li>批准後我開 issue，T1、T2 平行開工。</li>
+</ol>
+</div>
+</div>
