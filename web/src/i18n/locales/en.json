@@ -126,5 +126,17 @@
   "track.kind.lab": "Lab",
   "track.completed": "Completed",
   "track.done": "Every step is done.",
-  "track.next": "Next: {{title}}"
+  "track.next": "Next: {{title}}",
+  "attempt.tab.ticket": "Ticket",
+  "attempt.tab.steps": "Steps",
+  "attempt.tab.docs": "Docs",
+  "attempt.submit": "Submit",
+  "attempt.submitting": "Submitting",
+  "attempt.submitCount": "Submitted {{submits}} times",
+  "attempt.submitResult": "Last submission",
+  "attempt.submitHiddenFailed": "{{checks}} hidden checks failed",
+  "attempt.submitError": "Could not submit",
+  "provisioning.k3s": "Waiting for k3s",
+  "provisioning.precheck": "Checking the sandbox",
+  "provisioning.precheck.attempt": "Checking the sandbox (attempt {{attempt}})"
 }

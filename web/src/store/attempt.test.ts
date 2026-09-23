@@ -17,11 +17,13 @@ vi.mock("../api/client", async (importOriginal) => {
     ApiError: actual.ApiError,
     getAttempt: vi.fn(),
     abandonAttempt: vi.fn(),
+    submitAttempt: vi.fn(),
   };
 });
 
 const getAttempt = vi.mocked(client.getAttempt);
 const abandonAttempt = vi.mocked(client.abandonAttempt);
+const submitAttempt = vi.mocked(client.submitAttempt);
 
 const attempt: Attempt = {
   id: "01JATTEMPT",
@@ -58,6 +60,9 @@ const attempt: Attempt = {
       first_passed_at: null,
     },
   ],
+  checkpoints_hidden: false,
+  tutorial_steps: null,
+  submit_count: 0,
   elapsed_ms: 5000,
   started_at: "2026-09-23T00:00:00.000Z",
   ended_at: null,
@@ -137,6 +142,45 @@ describe("applyEvent", () => {
     expect(useAttemptStore.getState().errorMessage).toBe("docker is gone");
   });
 
+  it("records the precheck attempt number", () => {
+    useAttemptStore.getState().applyEvent({
+      type: "provisioning",
+      step: "precheck",
+      attempt: 2,
+    });
+
+    expect(useAttemptStore.getState().precheckAttempt).toBe(2);
+
+    useAttemptStore.getState().applyEvent({
+      type: "provisioning",
+      step: "containers",
+    });
+
+    const state = useAttemptStore.getState();
+    expect(state.provisioningStep).toBe("containers");
+    expect(state.precheckAttempt).toBe(2);
+  });
+
+  it("defaults the precheck attempt to the first one", () => {
+    useAttemptStore.getState().applyEvent({
+      type: "provisioning",
+      step: "precheck",
+    });
+
+    expect(useAttemptStore.getState().precheckAttempt).toBe(1);
+  });
+
+  it("counts a submit message", () => {
+    useAttemptStore.getState().applyEvent({
+      type: "submit",
+      passed: false,
+      hidden_failed: 2,
+      submit_count: 3,
+    });
+
+    expect(useAttemptStore.getState().submitCount).toBe(3);
+  });
+
   it("tracks the provisioning step and clears it once running", () => {
     useAttemptStore.getState().applyEvent({
       type: "provisioning",
@@ -212,6 +256,73 @@ describe("applyEvent", () => {
     });
 
     expect(useAttemptStore.getState().eventError).toBe("checker crashed");
+  });
+});
+
+describe("real mode", () => {
+  beforeEach(async () => {
+    getAttempt.mockResolvedValue({
+      ...attempt,
+      mode: "real",
+      checkpoints: [],
+      checkpoints_hidden: true,
+      submit_count: 1,
+    });
+    await useAttemptStore.getState().load(attempt.id);
+  });
+
+  it("takes the submit count from the attempt", () => {
+    expect(useAttemptStore.getState().submitCount).toBe(1);
+  });
+
+  it("ignores checkpoint events", () => {
+    useAttemptStore.getState().applyEvent({
+      type: "checkpoint",
+      id: "link-up",
+      status: "pass",
+      first_passed_at: "2026-09-23T00:00:09.000Z",
+    });
+
+    const state = useAttemptStore.getState();
+    expect(state.checkpointOrder).toEqual([]);
+    expect(state.checkpoints).toEqual({});
+  });
+
+  it("keeps the result of a failed submit", async () => {
+    const result = {
+      passed: false,
+      checkpoints: [
+        { id: "link-up", title: "The link is up", status: "pass" as const },
+      ],
+      hidden_failed: 1,
+      submit_count: 2,
+    };
+    submitAttempt.mockResolvedValue(result);
+
+    await useAttemptStore.getState().submit(attempt.id);
+
+    const state = useAttemptStore.getState();
+    expect(submitAttempt).toHaveBeenCalledWith(attempt.id);
+    expect(state.submitResult).toEqual(result);
+    expect(state.submitCount).toBe(2);
+    expect(state.submitting).toBe(false);
+
+    useAttemptStore.getState().clearSubmitResult();
+
+    expect(useAttemptStore.getState().submitResult).toBeNull();
+  });
+
+  it("reports a rejected submit", async () => {
+    submitAttempt.mockRejectedValue(
+      new ApiError(409, "attempt_finished", "already finished"),
+    );
+
+    await useAttemptStore.getState().submit(attempt.id);
+
+    const state = useAttemptStore.getState();
+    expect(state.submitError).toBe("already finished");
+    expect(state.submitResult).toBeNull();
+    expect(state.submitting).toBe(false);
   });
 });
 

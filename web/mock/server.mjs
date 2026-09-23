@@ -2,57 +2,16 @@ import { createServer } from "node:http";
 
 import { WebSocketServer } from "ws";
 
+import {
+  abandonPayload,
+  attemptPayload,
+  resultPayload,
+  serveEvents,
+  submit,
+} from "./attempts.mjs";
 import { docs, health, labs, topics, tracks } from "./fixtures.mjs";
 
 const port = 18090;
-const startedAt = Date.now();
-const lab = labs[0];
-const summary = ({ nodes, checkpoints, topic_title, ...rest }) => rest;
-const checkpoints = lab.checkpoints.map((checkpoint) => ({
-  ...checkpoint,
-  status: "pending",
-  first_passed_at: null,
-}));
-const solution = `## Fix
-\`\`\`sh
-ip link set eth0 up
-\`\`\`
-`;
-
-function attempt(id) {
-  return {
-    id,
-    lab_id: lab.id,
-    mode: "guided",
-    status: "running",
-    error_message: "",
-    lab: summary(lab),
-    ticket: "The server cannot reach the gateway.\nFind out why and fix it.",
-    nodes: lab.nodes,
-    checkpoints,
-    elapsed_ms: Date.now() - startedAt,
-    started_at: new Date(startedAt).toISOString(),
-    ended_at: null,
-    server_time: new Date().toISOString(),
-    created_at: new Date(startedAt).toISOString(),
-  };
-}
-
-function result(id) {
-  return {
-    attempt_id: id,
-    status: "passed",
-    lab: summary(lab),
-    elapsed_ms: 254000,
-    command_count: 17,
-    checkpoints: checkpoints.map((checkpoint, index) => ({
-      ...checkpoint,
-      status: "pass",
-      first_passed_at: new Date(startedAt + index * 60000).toISOString(),
-    })),
-    solution,
-  };
-}
 
 const inTopic = (topic, selected) =>
   selected === null || topic === selected || topic.startsWith(`${selected}/`);
@@ -171,21 +130,32 @@ const routes = [
   ],
   ["POST", /^\/api\/progress$/, (match, url, body) => markRead(body)],
   ["GET", /^\/api\/attempts\/current$/, () => ({ status: 204 })],
-  ["POST", /^\/api\/attempts$/, () => ({ body: attempt("01JMOCKATTEMPT") })],
+  [
+    "POST",
+    /^\/api\/attempts$/,
+    (match, url, body) => ({
+      body: attemptPayload(`01JMOCKATTEMPT-${body?.mode ?? "guided"}`),
+    }),
+  ],
   [
     "GET",
     /^\/api\/attempts\/([^/]+)$/,
-    (match) => ({ body: attempt(match[1]) }),
+    (match) => ({ body: attemptPayload(decodeURIComponent(match[1])) }),
   ],
   [
     "GET",
     /^\/api\/attempts\/([^/]+)\/result$/,
-    (match) => ({ body: result(match[1]) }),
+    (match) => ({ body: resultPayload(decodeURIComponent(match[1])) }),
+  ],
+  [
+    "POST",
+    /^\/api\/attempts\/([^/]+)\/submit$/,
+    (match) => submit(decodeURIComponent(match[1])),
   ],
   [
     "POST",
     /^\/api\/attempts\/([^/]+)\/abandon$/,
-    (match) => ({ body: { ...attempt(match[1]), status: "abandoned" } }),
+    (match) => ({ body: abandonPayload(decodeURIComponent(match[1])) }),
   ],
 ];
 
@@ -229,48 +199,19 @@ const server = createServer((request, response) => {
 
 const sockets = new WebSocketServer({ noServer: true });
 
+const eventsPath = /^\/ws\/attempts\/([^/]+)\/events$/;
+
 server.on("upgrade", (request, socket, head) => {
   const path = new URL(request.url, "http://localhost").pathname;
+  const match = eventsPath.exec(path);
   sockets.handleUpgrade(request, socket, head, (connection) => {
-    if (path.endsWith("/events")) {
-      serveEvents(connection);
-    } else {
+    if (match === null) {
       serveTerminal(connection);
+    } else {
+      serveEvents(connection, decodeURIComponent(match[1]));
     }
   });
 });
-
-function serveEvents(connection) {
-  const send = (message) => connection.send(JSON.stringify(message));
-  send({
-    type: "status",
-    status: "running",
-    error_message: "",
-    elapsed_ms: Date.now() - startedAt,
-    server_time: new Date().toISOString(),
-  });
-  const tick = setInterval(() => {
-    send({
-      type: "tick",
-      elapsed_ms: Date.now() - startedAt,
-      server_time: new Date().toISOString(),
-    });
-  }, 10000);
-  const pass = setTimeout(() => {
-    checkpoints[0].status = "pass";
-    checkpoints[0].first_passed_at = new Date().toISOString();
-    send({
-      type: "checkpoint",
-      id: checkpoints[0].id,
-      status: "pass",
-      first_passed_at: checkpoints[0].first_passed_at,
-    });
-  }, 15000);
-  connection.on("close", () => {
-    clearInterval(tick);
-    clearTimeout(pass);
-  });
-}
 
 function serveTerminal(connection) {
   connection.send(Buffer.from("$ "));
