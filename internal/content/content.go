@@ -103,6 +103,7 @@ type Lab struct {
 	Ticket           Localized    `yaml:"ticket"`
 	Params           Params       `yaml:"params"`
 	Setup            string       `yaml:"setup"`
+	RelatedDocs      []string     `yaml:"related_docs"`
 	Checkpoints      []Checkpoint `yaml:"checkpoints"`
 	Solution         Localized    `yaml:"solution"`
 

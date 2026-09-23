@@ -3,7 +3,7 @@ GO_LDFLAGS := -X main.version=$(VERSION)
 WEB_DIST := internal/web/dist
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null || echo $(shell go env GOPATH)/bin/golangci-lint)
 
-.PHONY: all build web dev lint test test-integration image clean
+.PHONY: all build web dev lint lint-content test test-integration image clean
 
 all: build
 
@@ -26,6 +26,9 @@ dev: web
 lint: web
 	$(GOLANGCI_LINT) run
 	cd web && npm run lint && npm run format:check && npm run typecheck
+
+lint-content: build
+	./bin/nsl content lint content
 
 test: web
 	go test ./...

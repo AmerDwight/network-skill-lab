@@ -1,0 +1,30 @@
+- id: net
+  title: { zh: "網路", en: "Networking" }
+  children:
+    - id: ip
+      title: { zh: "介面與路由 (ip / ifconfig / route)", en: "Interfaces & routing" }
+    - id: dns
+      title: { zh: "DNS 與 resolved", en: "DNS & resolved" }
+    - id: netplan
+      title: { zh: "netplan / networkd", en: "netplan / networkd" }
+    - id: fw
+      title: { zh: "iptables / nftables / ufw", en: "Firewall" }
+    - id: capture
+      title: { zh: "tcpdump / tshark", en: "Packet capture" }
+    - id: snmp
+      title: { zh: "SNMP / LLDP", en: "SNMP / LLDP" }
+- id: k3s
+  title: { zh: "k3s", en: "k3s" }
+  children:
+    - id: pods
+      title: { zh: "Pod 與工作負載", en: "Pods & workloads" }
+    - id: service
+      title: { zh: "Service 與 kube-proxy", en: "Services & kube-proxy" }
+    - id: dns
+      title: { zh: "叢集 DNS (CoreDNS)", en: "Cluster DNS (CoreDNS)" }
+    - id: node
+      title: { zh: "節點與 kubelet", en: "Nodes & kubelet" }
+    - id: storage
+      title: { zh: "儲存與 PVC", en: "Storage & PVCs" }
+    - id: ingress
+      title: { zh: "Ingress 與對外流量", en: "Ingress & external traffic" }
