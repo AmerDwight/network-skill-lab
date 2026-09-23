@@ -386,7 +386,7 @@ docs/                   本文件與後續 ADR
 | Phase | 類型 | 內容 | 完成定義 |
 |---|---|---|---|
 | 0 | spike | 風險驗證（§7） | R1 到 R5 有實測結果 |
-| 1 | 正式 | 核心：all-in-one binary、Docker provider、terminal 多分頁、timer、checker、SQLite、1 個 fixture lab | 能從瀏覽器完整跑完一題 guided 模式 |
+| 1 | 正式 | 核心：all-in-one binary、Docker provider、terminal 多分頁、timer、checker、SQLite、1 個 fixture lab | 能從瀏覽器完整跑完一題 guided 模式。**2026-09-23 完成**，見 `docs/PHASE1-RESULTS.md` |
 | 2 | 正式 | 內容系統：docs 面板、tracks、tutorial / real 模式、params 隨機化、precheck、`content lint` | 不改程式碼就能新增 lab / doc / track；§3.9 每個擴充點至少有一個 fixture lab 覆蓋（預計 net × 3、k3s × 2） |
 | 3 | 正式 | 帳號 admin/user、歷史紀錄頁、錄製回放 | 多帳號可各自練習並回看 |
 | 4 | 正式 | 遠端 runner | 成員自架 runner 可接上 |
