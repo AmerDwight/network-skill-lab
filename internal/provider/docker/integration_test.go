@@ -242,6 +242,78 @@ func assertNothingLeft(t *testing.T, cli client.APIClient, f filters.Args) {
 	}
 }
 
+func routedSpec(attempt string) runner.SandboxSpec {
+	return runner.SandboxSpec{
+		AttemptID: attempt,
+		Image:     testImage,
+		Internet:  true,
+		Nodes: []runner.NodeSpec{
+			{Name: "web01", Role: "ubuntu"},
+			{Name: "gw01", Role: "ubuntu"},
+			{Name: "db01", Role: "ubuntu"},
+		},
+		Links: []runner.LinkSpec{
+			{Name: "link-a", Subnet: "10.0.61.0/24", Endpoints: []runner.EndpointSpec{
+				{Node: "web01", Iface: "eth1", Address: "10.0.61.10/24"},
+				{Node: "gw01", Iface: "eth1", Address: "10.0.61.2/24"},
+			}},
+			{Name: "link-b", Subnet: "10.0.62.0/24", Endpoints: []runner.EndpointSpec{
+				{Node: "gw01", Iface: "eth2", Address: "10.0.62.2/24"},
+				{Node: "db01", Iface: "eth1", Address: "10.0.62.20/24"},
+			}},
+		},
+	}
+}
+
+func TestRoutedTopology(t *testing.T) {
+	p, _ := newProvider(t)
+	attempt := attemptID(t)
+	t.Cleanup(func() {
+		if err := p.Destroy(context.WithoutCancel(t.Context()), runner.SandboxID(attempt)); err != nil {
+			t.Errorf("cleanup: %v", err)
+		}
+	})
+
+	start := time.Now()
+	sb, err := p.Provision(t.Context(), routedSpec(attempt))
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	t.Logf("provision took %s", time.Since(start).Round(time.Millisecond))
+
+	for _, node := range []string{"web01", "gw01", "db01"} {
+		out := string(mustExec(t, p, sb, node, "ip", "route", "show", "default").Stdout)
+		if !strings.Contains(out, "dev eth0") {
+			t.Errorf("%s default route = %q, want it via the mgmt interface", node, out)
+		}
+		if strings.Contains(out, "dev eth1") || strings.Contains(out, "dev eth2") {
+			t.Errorf("%s default route = %q, want no default route via a link", node, out)
+		}
+	}
+
+	mustExec(t, p, sb, "gw01", "sysctl", "-w", "net.ipv4.ip_forward=1")
+	mustExec(t, p, sb, "web01", "ip", "route", "add", "10.0.62.0/24", "via", "10.0.61.2")
+	mustExec(t, p, sb, "db01", "ip", "route", "add", "10.0.61.0/24", "via", "10.0.62.2")
+	mustExec(t, p, sb, "web01", "ping", "-c", "3", "-i", "0.5", "-W", "1", "10.0.62.20")
+
+	if code := pingExitCode(t, p, sb, "web01", "eth1", "1.1.1.1"); code == 0 {
+		t.Error("web01 reached 1.1.1.1 over eth1, want a link network with no way out")
+	}
+	if code := pingExitCode(t, p, sb, "web01", "eth0", "10.0.62.20"); code == 0 {
+		t.Error("web01 reached the far link subnet over eth0, want it reachable over the link only")
+	}
+}
+
+func pingExitCode(t *testing.T, p *Provider, sb runner.SandboxID, node, iface, target string) int {
+	t.Helper()
+	cmd := []string{"ping", "-c", "1", "-W", "1", "-I", iface, target}
+	result, err := p.Exec(t.Context(), sb, node, cmd, runner.ExecOptions{Timeout: 10 * time.Second})
+	if err != nil {
+		t.Fatalf("ping %s from %s on %s: %v", target, iface, node, err)
+	}
+	return result.ExitCode
+}
+
 func TestGC(t *testing.T) {
 	p, cli := newProvider(t)
 	attempt := attemptID(t)
