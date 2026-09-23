@@ -1,11 +1,15 @@
 package attempt
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +26,8 @@ const (
 	defaultTickInterval = 10 * time.Second
 	defaultIdleTimeout  = 15 * time.Minute
 	provisionTimeout    = 3 * time.Minute
+	precheckTimeout     = 30 * time.Second
+	precheckTailLines   = 20
 	destroyTimeout      = 2 * time.Minute
 	storeTimeout        = 10 * time.Second
 	defaultHookTimeout  = 5 * time.Second
@@ -190,23 +196,30 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 		return View{}, fmt.Errorf("%w: user %s", ErrActiveAttempt, userID)
 	}
 
-	params, err := lab.Params.Resolve()
+	seed, err := newSeed()
+	if err != nil {
+		return View{}, err
+	}
+	resolved, err := lab.ResolveFor(seed)
 	if err != nil {
 		return View{}, fmt.Errorf("resolve params of lab %s: %w", labID, err)
 	}
-	paramsJSON, err := json.Marshal(params)
+	paramsJSON, err := json.Marshal(resolved.Params)
 	if err != nil {
 		return View{}, fmt.Errorf("encode params of lab %s: %w", labID, err)
 	}
 
 	now := s.now()
+	signedSeed := int64(seed)
 	att := store.Attempt{
 		ID:         store.NewID(),
 		UserID:     userID,
 		LabID:      lab.Id,
 		LabVersion: lab.Version,
+		CaseID:     resolved.CaseID,
 		Mode:       mode,
 		ParamsJSON: string(paramsJSON),
+		Seed:       &signedSeed,
 		Status:     store.StatusProvisioning,
 		CreatedAt:  now,
 	}
@@ -218,7 +231,7 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 	s.bus.publish(statusEvent(att, now))
 
 	s.wg.Add(1)
-	go s.provision(att.ID, lab, params)
+	go s.provision(att.ID, lab, resolved, seed)
 
 	return s.view(ctx, att)
 }
@@ -397,13 +410,13 @@ func (s *Service) tick(id string, startedAt time.Time, stop <-chan struct{}) {
 	}
 }
 
-func (s *Service) provision(id string, lab content.Lab, params map[string]string) {
+func (s *Service) provision(id string, lab content.Lab, resolved content.Resolved, seed uint64) {
 	defer s.wg.Done()
 
-	ctx, cancel := context.WithTimeout(s.ctx, provisionTimeout)
+	ctx, cancel := context.WithTimeout(s.ctx, time.Duration(provisionAttempts(lab))*provisionTimeout)
 	defer cancel()
 
-	sandbox, err := s.runProvision(ctx, id, lab, params)
+	sandbox, err := s.provisionUntilPrechecked(ctx, id, lab, resolved, seed)
 	if err != nil {
 		if s.stopping() {
 			s.log.Warn("provisioning interrupted by shutdown", "attempt", id, "error", err)
@@ -418,7 +431,109 @@ func (s *Service) provision(id string, lab content.Lab, params map[string]string
 	}
 }
 
-func (s *Service) runProvision(ctx context.Context, id string, lab content.Lab, params map[string]string) (runner.SandboxID, error) {
+func provisionAttempts(lab content.Lab) int {
+	if lab.Precheck == nil {
+		return 1
+	}
+	return lab.Precheck.Retries
+}
+
+func (s *Service) provisionUntilPrechecked(ctx context.Context, id string, lab content.Lab, resolved content.Resolved, seed uint64) (runner.SandboxID, error) {
+	total := provisionAttempts(lab)
+	for attempt := 1; ; attempt++ {
+		sandbox, err := s.runProvision(ctx, id, lab, resolved)
+		if err != nil {
+			return "", err
+		}
+		if lab.Precheck == nil {
+			return sandbox, nil
+		}
+
+		failure, err := s.runPrecheck(ctx, id, sandbox, lab, resolved)
+		if err != nil {
+			s.destroy(id, string(sandbox))
+			return "", err
+		}
+		if failure == nil {
+			return sandbox, nil
+		}
+		if attempt == total {
+			s.destroy(id, string(sandbox))
+			return "", fmt.Errorf("precheck failed after %d attempts on %s: %s", total, failure.node, failure.stderr)
+		}
+
+		s.bus.publish(Event{AttemptID: id, Type: EventProvisioning, Step: StepPrecheck, Attempt: attempt + 1, ServerTime: s.now()})
+		s.destroy(id, string(sandbox))
+
+		seed++
+		resolved, err = lab.ResolveFor(seed)
+		if err != nil {
+			return "", fmt.Errorf("resolve params of lab %s: %w", lab.Id, err)
+		}
+		if err := s.storeResolved(id, seed, resolved); err != nil {
+			return "", err
+		}
+	}
+}
+
+type precheckFailure struct {
+	node   string
+	stderr string
+}
+
+func (s *Service) runPrecheck(ctx context.Context, id string, sandbox runner.SandboxID, lab content.Lab, resolved content.Resolved) (*precheckFailure, error) {
+	script, err := os.ReadFile(filepath.Join(lab.Dir, lab.Precheck.Script))
+	if err != nil {
+		return nil, fmt.Errorf("read precheck script: %w", err)
+	}
+
+	env := resolved.Env()
+	for _, node := range slices.Sorted(maps.Keys(lab.Topology.Nodes)) {
+		nodeEnv := maps.Clone(env)
+		nodeEnv["NSL_NODE"] = node
+		opts := runner.ExecOptions{Env: nodeEnv, Stdin: bytes.NewReader(script), Timeout: precheckTimeout}
+		result, err := s.runner.Exec(ctx, sandbox, node, []string{"bash", "-s"}, opts)
+		if err != nil {
+			return nil, fmt.Errorf("run precheck on %s: %w", node, err)
+		}
+		if result.TimedOut {
+			return &precheckFailure{node: node, stderr: fmt.Sprintf("timed out after %s", precheckTimeout)}, nil
+		}
+		if result.ExitCode != 0 {
+			s.log.Info("precheck failed", "attempt", id, "node", node, "exit_code", result.ExitCode)
+			return &precheckFailure{node: node, stderr: stderrTail(result.Stderr)}, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *Service) storeResolved(id string, seed uint64, resolved content.Resolved) error {
+	paramsJSON, err := json.Marshal(resolved.Params)
+	if err != nil {
+		return fmt.Errorf("encode params of attempt %s: %w", id, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
+	defer cancel()
+	return s.store.Attempts.SetResolved(ctx, id, int64(seed), resolved.CaseID, string(paramsJSON))
+}
+
+func stderrTail(stderr []byte) string {
+	lines := strings.Split(strings.TrimRight(string(stderr), "\n"), "\n")
+	if len(lines) > precheckTailLines {
+		lines = lines[len(lines)-precheckTailLines:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func newSeed() (uint64, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0, fmt.Errorf("draw an attempt seed: %w", err)
+	}
+	return binary.BigEndian.Uint64(b[:]), nil
+}
+
+func (s *Service) runProvision(ctx context.Context, id string, lab content.Lab, resolved content.Resolved) (runner.SandboxID, error) {
 	var setup []byte
 	if lab.Setup != "" {
 		read, err := os.ReadFile(filepath.Join(lab.Dir, lab.Setup))
@@ -428,7 +543,7 @@ func (s *Service) runProvision(ctx context.Context, id string, lab content.Lab, 
 		setup = read
 	}
 
-	spec, err := runner.SpecFromLab(id, s.image, lab, params, setup)
+	spec, err := runner.SpecFromLab(id, s.image, lab, resolved, setup)
 	if err != nil {
 		return "", err
 	}
@@ -591,11 +706,15 @@ func (s *Service) view(ctx context.Context, att store.Attempt) (View, error) {
 	if err := json.Unmarshal([]byte(att.ParamsJSON), &params); err != nil {
 		return View{}, fmt.Errorf("decode params of attempt %s: %w", att.ID, err)
 	}
+	resolved := content.Resolved{CaseID: att.CaseID, Params: params}
+	if picked, ok := lab.CaseByID(att.CaseID); ok {
+		resolved.SetupEnv = picked.SetupEnv
+	}
 	runs, err := s.store.CheckpointRuns.ListByAttempt(ctx, att.ID)
 	if err != nil {
 		return View{}, err
 	}
-	return newView(att, lab, params, runs, s.now())
+	return newView(att, lab, resolved, runs, s.now())
 }
 
 func (s *Service) stopping() bool {

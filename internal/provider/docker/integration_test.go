@@ -62,7 +62,7 @@ func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
 	}
 	lab := labs[i]
 
-	params, err := lab.Params.Resolve()
+	resolved, err := lab.ResolveFor(1)
 	if err != nil {
 		t.Fatalf("resolve params: %v", err)
 	}
@@ -70,7 +70,7 @@ func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
 	if err != nil {
 		t.Fatalf("read setup script: %v", err)
 	}
-	spec, err := runner.SpecFromLab(attempt, testImage, lab, params, setup)
+	spec, err := runner.SpecFromLab(attempt, testImage, lab, resolved, setup)
 	if err != nil {
 		t.Fatalf("SpecFromLab: %v", err)
 	}

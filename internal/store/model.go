@@ -42,6 +42,8 @@ type Attempt struct {
 	CaseID       string
 	Mode         string
 	ParamsJSON   string
+	Seed         *int64
+	SubmitCount  int
 	Status       string
 	ErrorMessage string
 	StartedAt    *time.Time
@@ -50,6 +52,13 @@ type Attempt struct {
 	RunnerID     string
 	SandboxID    string
 	CreatedAt    time.Time
+}
+
+type ProgressEntry struct {
+	UserID      string
+	Kind        string
+	Ref         string
+	CompletedAt time.Time
 }
 
 type CheckpointRun struct {

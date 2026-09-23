@@ -77,10 +77,10 @@ func TestParamsEnv(t *testing.T) {
 
 func TestParamsResolveInOrder(t *testing.T) {
 	params := Params{
-		{Name: "node_a", Gen: "const", Value: "web01"},
-		{Name: "host", Gen: "const", Value: "{{node_a}}.example"},
+		{Name: "node_a", Gen: GenConst, Value: "web01"},
+		{Name: "host", Gen: GenConst, Value: "{{node_a}}.example"},
 	}
-	got, err := params.Resolve()
+	got, err := params.Resolve(1)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}

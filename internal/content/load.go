@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -47,7 +49,32 @@ func loadLab(dir string) (*Lab, error) {
 		return nil, fmt.Errorf("%s: %w", dir, err)
 	}
 	lab.Dir = dir
+	loadCases(&lab)
+	if lab.Precheck != nil && lab.Precheck.Retries == 0 {
+		lab.Precheck.Retries = defaultPrecheckRetries
+	}
 	return &lab, nil
+}
+
+func loadCases(lab *Lab) {
+	for i := range lab.Cases {
+		entry := &lab.Cases[i]
+		entry.ID = caseID(entry.File)
+		if entry.File == "" {
+			continue
+		}
+		var file caseFile
+		if err := decodeFile(filepath.Join(lab.Dir, filepath.FromSlash(entry.File)), &file); err != nil {
+			lab.caseErrs = append(lab.caseErrs, labErrf(lab, fmt.Sprintf("cases[%d].file", i), "%v", err))
+			continue
+		}
+		entry.Params, entry.SetupEnv = file.Params, file.SetupEnv
+	}
+}
+
+func caseID(file string) string {
+	name := path.Base(path.Clean(file))
+	return strings.TrimSuffix(name, path.Ext(name))
 }
 
 func decodeFile(path string, v any) error {

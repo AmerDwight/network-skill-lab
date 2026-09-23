@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
-	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
@@ -312,7 +311,7 @@ func (c *Checker) finish(ctx context.Context, id string) {
 }
 
 func loadCheckpoints(view attempt.View) ([]checkpoint, error) {
-	env := content.ParamsEnv(view.Params)
+	env := view.Env
 	checkpoints := make([]checkpoint, 0, len(view.Lab.Checkpoints))
 	for _, cp := range view.Lab.Checkpoints {
 		script, err := os.ReadFile(filepath.Join(view.Lab.Dir, cp.Script))

@@ -18,9 +18,19 @@ func localizedFields(prefix string, l Localized) []localizedField {
 	return []localizedField{{prefix + ".zh", l.Zh}, {prefix + ".en", l.En}}
 }
 
+const (
+	validationSeed         = 1
+	defaultPrecheckRetries = 3
+	minPrecheckRetries     = 1
+	maxPrecheckRetries     = 5
+	tutorialMode           = "tutorial"
+	k3sServerRole          = "k3s-server"
+)
+
 var (
-	allowedModes = []string{"guided"}
-	allowedRoles = []string{"ubuntu", "ubuntu-nm", "k3s-server", "k3s-agent"}
+	allowedModes = []string{tutorialMode, "guided", "real"}
+	allowedRoles = []string{"ubuntu", "ubuntu-nm", k3sServerRole, "k3s-agent"}
+	allowedGens  = []string{GenConst, GenCIDR, GenIPIn, GenChoice, GenInt}
 )
 
 var checks = []func(*Lab) []error{
@@ -36,6 +46,11 @@ var checks = []func(*Lab) []error{
 	checkRoles,
 	checkLinks,
 	checkSolution,
+	checkCases,
+	checkPrecheck,
+	checkRequires,
+	checkTutorial,
+	checkK3s,
 }
 
 func validate(lab *Lab) []error {
@@ -93,27 +108,17 @@ func checkLevel(lab *Lab) []error {
 
 func checkParams(lab *Lab) []error {
 	var errs []error
-	defined := map[string]string{}
 	for _, param := range lab.Params {
-		field := "params." + param.Name
-		if param.Gen != "const" {
-			errs = append(errs, labErrf(lab, field, "gen must be \"const\", got %q", param.Gen))
-		}
-		if param.Value == "" {
-			errs = append(errs, labErrf(lab, field, "value must not be empty"))
-		}
-		value, err := Render(param.Value, defined)
-		if err != nil {
-			errs = append(errs, labErrf(lab, field, "%v", err))
-			continue
-		}
-		defined[param.Name] = value
+		errs = append(errs, checkParamFields(lab, "params."+param.Name, param)...)
 	}
+	lab.Params.resolve(validationSeed, func(name string, err error) {
+		errs = append(errs, labErrf(lab, "params."+name, "%v", err))
+	})
 	return errs
 }
 
 func checkTicket(lab *Lab) []error {
-	params, _ := lab.Params.Resolve()
+	params, _ := lab.Params.Resolve(validationSeed)
 	var errs []error
 	for _, field := range localizedFields("ticket", lab.Ticket) {
 		if _, err := Render(field.text, params); err != nil {
@@ -124,7 +129,7 @@ func checkTicket(lab *Lab) []error {
 }
 
 func checkCheckpoints(lab *Lab) []error {
-	params, _ := lab.Params.Resolve()
+	params, _ := lab.Params.Resolve(validationSeed)
 	var errs []error
 	seen := map[string]bool{}
 	for i, cp := range lab.Checkpoints {
@@ -181,7 +186,7 @@ func checkRoles(lab *Lab) []error {
 }
 
 func checkLinks(lab *Lab) []error {
-	params, _ := lab.Params.Resolve()
+	params, _ := lab.Params.Resolve(validationSeed)
 	var errs []error
 	for i, link := range lab.Topology.Links {
 		field := fmt.Sprintf("links[%d]", i)

@@ -14,6 +14,8 @@ const (
 	EventError        = "error"
 )
 
+const StepPrecheck = "precheck"
+
 const subscriberBuffer = 64
 
 type CheckpointEvent struct {
@@ -28,6 +30,7 @@ type Event struct {
 	Status       string
 	ErrorMessage string
 	Step         string
+	Attempt      int
 	ElapsedMS    int64
 	ServerTime   time.Time
 	Checkpoint   *CheckpointEvent
