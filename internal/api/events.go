@@ -15,8 +15,9 @@ type statusMessage struct {
 }
 
 type provisioningMessage struct {
-	Type string `json:"type"`
-	Step string `json:"step"`
+	Type    string `json:"type"`
+	Step    string `json:"step"`
+	Attempt int    `json:"attempt,omitempty"`
 }
 
 type checkpointMessage struct {
@@ -115,7 +116,7 @@ func eventMessage(ev attempt.Event) (any, bool) {
 			ServerTime:   formatTime(ev.ServerTime),
 		}, true
 	case attempt.EventProvisioning:
-		return provisioningMessage{Type: attempt.EventProvisioning, Step: ev.Step}, true
+		return provisioningMessage{Type: attempt.EventProvisioning, Step: ev.Step, Attempt: ev.Attempt}, true
 	case attempt.EventCheckpoint:
 		if ev.Checkpoint == nil {
 			return nil, false

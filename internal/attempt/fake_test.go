@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -97,6 +98,14 @@ func (c *fakeClock) fire(t *testing.T, d time.Duration) {
 	}
 }
 
+type execCall struct {
+	sandbox string
+	node    string
+	cmd     []string
+	script  string
+	env     map[string]string
+}
+
 type fakeRunner struct {
 	mu         sync.Mutex
 	steps      []string
@@ -105,6 +114,8 @@ type fakeRunner struct {
 	provisions int
 	destroyed  []string
 	gcs        int
+	execs      []execCall
+	exec       func(call execCall, nth int) (runner.ExecResult, error)
 }
 
 var _ runner.Runner = (*fakeRunner)(nil)
@@ -155,8 +166,33 @@ func (f *fakeRunner) OpenTerminal(_ context.Context, _ runner.SandboxID, _ strin
 	return nil, errors.New("not implemented")
 }
 
-func (f *fakeRunner) Exec(_ context.Context, _ runner.SandboxID, _ string, _ []string, _ runner.ExecOptions) (runner.ExecResult, error) {
-	return runner.ExecResult{}, errors.New("not implemented")
+func (f *fakeRunner) Exec(_ context.Context, sb runner.SandboxID, node string, cmd []string, opts runner.ExecOptions) (runner.ExecResult, error) {
+	var script []byte
+	if opts.Stdin != nil {
+		read, err := io.ReadAll(opts.Stdin)
+		if err != nil {
+			return runner.ExecResult{}, err
+		}
+		script = read
+	}
+	call := execCall{sandbox: string(sb), node: node, cmd: cmd, script: string(script), env: maps.Clone(opts.Env)}
+
+	f.mu.Lock()
+	f.execs = append(f.execs, call)
+	nth := len(f.execs)
+	exec := f.exec
+	f.mu.Unlock()
+
+	if exec == nil {
+		return runner.ExecResult{}, errors.New("not implemented")
+	}
+	return exec(call, nth)
+}
+
+func (f *fakeRunner) execCalls() []execCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]execCall(nil), f.execs...)
 }
 
 func (f *fakeRunner) Health(_ context.Context) runner.Health {

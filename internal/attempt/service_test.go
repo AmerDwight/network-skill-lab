@@ -33,8 +33,13 @@ type harness struct {
 
 func newHarness(t *testing.T, fr *fakeRunner) *harness {
 	t.Helper()
+	return newHarnessWithContent(t, fr, "../../content")
+}
 
-	labs, err := content.Load("../../content")
+func newHarnessWithContent(t *testing.T, fr *fakeRunner, dir string) *harness {
+	t.Helper()
+
+	labs, err := content.Load(dir)
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}

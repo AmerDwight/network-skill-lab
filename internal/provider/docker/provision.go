@@ -76,7 +76,8 @@ func (p *Provider) provision(ctx context.Context, spec runner.SandboxSpec, log *
 
 func (p *Provider) createNetworks(ctx context.Context, spec runner.SandboxSpec, log *slog.Logger) error {
 	mgmt := mgmtNetworkName(spec.AttemptID)
-	if _, err := p.cli.NetworkCreate(ctx, mgmt, network.CreateOptions{Labels: attemptLabels(spec.AttemptID)}); err != nil {
+	mgmtOpts := network.CreateOptions{Internal: !spec.Internet, Labels: attemptLabels(spec.AttemptID)}
+	if _, err := p.cli.NetworkCreate(ctx, mgmt, mgmtOpts); err != nil {
 		return fmt.Errorf("network %s: %w", mgmt, err)
 	}
 	log.Debug("created network", "network", mgmt)

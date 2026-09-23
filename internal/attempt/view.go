@@ -10,6 +10,8 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
+const tutorialMode = "tutorial"
+
 type Node struct {
 	Name string
 	Role string
@@ -19,25 +21,35 @@ type Checkpoint struct {
 	Id            string
 	Title         content.Localized
 	Status        string
+	Visible       bool
 	FirstPassedAt *time.Time
 }
 
+type TutorialStep struct {
+	Checkpoint  string
+	Instruction content.Localized
+}
+
 type View struct {
-	Id           string
-	LabID        string
-	Mode         string
-	Status       string
-	ErrorMessage string
-	SandboxID    string
-	Lab          content.Lab
-	Params       map[string]string
-	Nodes        []Node
-	Checkpoints  []Checkpoint
-	ElapsedMS    int64
-	StartedAt    *time.Time
-	EndedAt      *time.Time
-	CreatedAt    time.Time
-	ServerTime   time.Time
+	Id            string
+	LabID         string
+	Mode          string
+	Status        string
+	ErrorMessage  string
+	SandboxID     string
+	Lab           content.Lab
+	CaseID        string
+	Seed          *int64
+	Params        map[string]string
+	Env           map[string]string
+	Nodes         []Node
+	Checkpoints   []Checkpoint
+	TutorialSteps []TutorialStep
+	ElapsedMS     int64
+	StartedAt     *time.Time
+	EndedAt       *time.Time
+	CreatedAt     time.Time
+	ServerTime    time.Time
 
 	ticket content.Localized
 }
@@ -46,7 +58,8 @@ func (v View) Ticket(lang string) string {
 	return v.ticket.Get(lang)
 }
 
-func newView(att store.Attempt, lab content.Lab, params map[string]string, runs []store.CheckpointRun, now time.Time) (View, error) {
+func newView(att store.Attempt, lab content.Lab, resolved content.Resolved, runs []store.CheckpointRun, now time.Time) (View, error) {
+	params := resolved.Params
 	ticket, err := renderLocalized(lab.Ticket, params)
 	if err != nil {
 		return View{}, fmt.Errorf("render ticket of lab %s: %w", lab.Id, err)
@@ -59,19 +72,21 @@ func newView(att store.Attempt, lab content.Lab, params map[string]string, runs 
 
 	checkpoints := make([]Checkpoint, 0, len(lab.Checkpoints))
 	for _, cp := range lab.Checkpoints {
-		if !cp.Visible {
-			continue
-		}
 		title, err := renderLocalized(cp.Title, params)
 		if err != nil {
 			return View{}, fmt.Errorf("render title of checkpoint %s: %w", cp.Id, err)
 		}
-		checkpoint := Checkpoint{Id: cp.Id, Title: title, Status: store.CheckpointPending}
+		checkpoint := Checkpoint{Id: cp.Id, Title: title, Status: store.CheckpointPending, Visible: cp.Visible}
 		if run, ok := byID[cp.Id]; ok {
 			checkpoint.Status = run.LastStatus
 			checkpoint.FirstPassedAt = run.FirstPassedAt
 		}
 		checkpoints = append(checkpoints, checkpoint)
+	}
+
+	steps, err := tutorialSteps(att.Mode, lab, params)
+	if err != nil {
+		return View{}, err
 	}
 
 	nodes := make([]Node, 0, len(lab.Topology.Nodes))
@@ -80,23 +95,42 @@ func newView(att store.Attempt, lab content.Lab, params map[string]string, runs 
 	}
 
 	return View{
-		Id:           att.ID,
-		LabID:        att.LabID,
-		Mode:         att.Mode,
-		Status:       att.Status,
-		ErrorMessage: att.ErrorMessage,
-		SandboxID:    att.SandboxID,
-		Lab:          lab,
-		Params:       params,
-		Nodes:        nodes,
-		Checkpoints:  checkpoints,
-		ElapsedMS:    elapsedMS(att, now),
-		StartedAt:    att.StartedAt,
-		EndedAt:      att.EndedAt,
-		CreatedAt:    att.CreatedAt,
-		ServerTime:   now,
-		ticket:       ticket,
+		Id:            att.ID,
+		LabID:         att.LabID,
+		Mode:          att.Mode,
+		Status:        att.Status,
+		ErrorMessage:  att.ErrorMessage,
+		SandboxID:     att.SandboxID,
+		Lab:           lab,
+		CaseID:        att.CaseID,
+		Seed:          att.Seed,
+		Params:        params,
+		Env:           resolved.Env(),
+		Nodes:         nodes,
+		Checkpoints:   checkpoints,
+		TutorialSteps: steps,
+		ElapsedMS:     elapsedMS(att, now),
+		StartedAt:     att.StartedAt,
+		EndedAt:       att.EndedAt,
+		CreatedAt:     att.CreatedAt,
+		ServerTime:    now,
+		ticket:        ticket,
 	}, nil
+}
+
+func tutorialSteps(mode string, lab content.Lab, params map[string]string) ([]TutorialStep, error) {
+	if mode != tutorialMode || len(lab.Tutorial) == 0 {
+		return nil, nil
+	}
+	steps := make([]TutorialStep, 0, len(lab.Tutorial))
+	for _, step := range lab.Tutorial {
+		instruction, err := renderLocalized(step.Instruction, params)
+		if err != nil {
+			return nil, fmt.Errorf("render instruction of tutorial step %s: %w", step.Checkpoint, err)
+		}
+		steps = append(steps, TutorialStep{Checkpoint: step.Checkpoint, Instruction: instruction})
+	}
+	return steps, nil
 }
 
 func renderLocalized(l content.Localized, params map[string]string) (content.Localized, error) {

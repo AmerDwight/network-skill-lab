@@ -12,7 +12,7 @@ type Attempts struct {
 	db *sql.DB
 }
 
-const attemptColumns = `id, user_id, lab_id, lab_version, case_id, mode, params_json, status,
+const attemptColumns = `id, user_id, lab_id, lab_version, case_id, mode, params_json, seed, submit_count, status,
 	error_message, started_at, ended_at, elapsed_ms, runner_id, sandbox_id, created_at`
 
 func (a *Attempts) Create(ctx context.Context, attempt Attempt) error {
@@ -21,7 +21,7 @@ func (a *Attempts) Create(ctx context.Context, attempt Attempt) error {
 	}
 	_, err := a.db.ExecContext(ctx,
 		`INSERT INTO attempts (`+attemptColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		attempt.ID,
 		attempt.UserID,
 		attempt.LabID,
@@ -29,6 +29,8 @@ func (a *Attempts) Create(ctx context.Context, attempt Attempt) error {
 		nullString(attempt.CaseID),
 		attempt.Mode,
 		attempt.ParamsJSON,
+		nullInt64(attempt.Seed),
+		attempt.SubmitCount,
 		attempt.Status,
 		nullString(attempt.ErrorMessage),
 		nullTime(attempt.StartedAt),
@@ -149,10 +151,35 @@ func (a *Attempts) SetStartedAt(ctx context.Context, id string, t time.Time) err
 	return nil
 }
 
+func (a *Attempts) SetResolved(ctx context.Context, id string, seed int64, caseID, paramsJSON string) error {
+	res, err := a.db.ExecContext(ctx,
+		`UPDATE attempts SET seed = ?, case_id = ?, params_json = ? WHERE id = ?`,
+		seed, nullString(caseID), paramsJSON, id)
+	if err != nil {
+		return fmt.Errorf("set resolved params of attempt %s: %w", id, err)
+	}
+	if err := requireRow(res); err != nil {
+		return fmt.Errorf("set resolved params of attempt %s: %w", id, err)
+	}
+	return nil
+}
+
+func (a *Attempts) IncrementSubmitCount(ctx context.Context, id string) error {
+	res, err := a.db.ExecContext(ctx, `UPDATE attempts SET submit_count = submit_count + 1 WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("increment submit count of attempt %s: %w", id, err)
+	}
+	if err := requireRow(res); err != nil {
+		return fmt.Errorf("increment submit count of attempt %s: %w", id, err)
+	}
+	return nil
+}
+
 func scanAttempt(scan func(dest ...any) error) (Attempt, error) {
 	var (
 		attempt      Attempt
 		caseID       sql.NullString
+		seed         sql.NullInt64
 		errorMessage sql.NullString
 		startedAt    sql.NullString
 		endedAt      sql.NullString
@@ -168,6 +195,8 @@ func scanAttempt(scan func(dest ...any) error) (Attempt, error) {
 		&caseID,
 		&attempt.Mode,
 		&attempt.ParamsJSON,
+		&seed,
+		&attempt.SubmitCount,
 		&attempt.Status,
 		&errorMessage,
 		&startedAt,
@@ -181,6 +210,9 @@ func scanAttempt(scan func(dest ...any) error) (Attempt, error) {
 	}
 
 	attempt.CaseID = caseID.String
+	if seed.Valid {
+		attempt.Seed = &seed.Int64
+	}
 	attempt.ErrorMessage = errorMessage.String
 	attempt.RunnerID = runnerID.String
 	attempt.SandboxID = sandboxID.String

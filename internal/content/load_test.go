@@ -35,7 +35,7 @@ func TestLoadRealContent(t *testing.T) {
 		t.Errorf("param order = %v, want %v", names, want)
 	}
 
-	params, err := lab.Params.Resolve()
+	params, err := lab.Params.Resolve(1)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}

@@ -9,8 +9,8 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 )
 
-func SpecFromLab(attemptID, image string, lab content.Lab, params map[string]string, setup []byte) (SandboxSpec, error) {
-	topology, err := lab.Topology.Resolve(params)
+func SpecFromLab(attemptID, image string, lab content.Lab, resolved content.Resolved, setup []byte) (SandboxSpec, error) {
+	topology, err := lab.Topology.Resolve(resolved.Params)
 	if err != nil {
 		return SandboxSpec{}, fmt.Errorf("resolve topology: %w", err)
 	}
@@ -41,7 +41,8 @@ func SpecFromLab(attemptID, image string, lab content.Lab, params map[string]str
 		Nodes:     nodes,
 		Links:     links,
 		Setup:     Script{Name: lab.Setup, Content: setup},
-		Env:       content.ParamsEnv(params),
+		Env:       resolved.Env(),
+		Internet:  lab.InternetEnabled(),
 	}, nil
 }
 

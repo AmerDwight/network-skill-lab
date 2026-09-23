@@ -135,8 +135,8 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:   "unsupported mode",
-			mutate: func(f *fixture) { f.replace("lab", "modes: [guided]", "modes: [guided, real]") },
-			want:   `modes: "real" is not supported`,
+			mutate: func(f *fixture) { f.replace("lab", "modes: [guided]", "modes: [guided, chaos]") },
+			want:   `modes: "chaos" is not supported`,
 		},
 		{
 			name:   "empty modes",
@@ -156,16 +156,16 @@ func TestValidate(t *testing.T) {
 		{
 			name: "unsupported param generator",
 			mutate: func(f *fixture) {
-				f.replace("lab", "iface:  { gen: const, value: eth1 }", "iface:  { gen: choice, value: eth1 }")
+				f.replace("lab", "iface:  { gen: const, value: eth1 }", "iface:  { gen: random, value: eth1 }")
 			},
-			want: `params.iface: gen must be "const", got "choice"`,
+			want: `params.iface: gen "random" is not supported`,
 		},
 		{
 			name: "empty param value",
 			mutate: func(f *fixture) {
 				f.replace("lab", "iface:  { gen: const, value: eth1 }", `iface:  { gen: const, value: "" }`)
 			},
-			want: "params.iface: value must not be empty",
+			want: `params.iface: gen "const" requires "value"`,
 		},
 		{
 			name: "param references a later param",

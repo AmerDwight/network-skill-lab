@@ -27,16 +27,32 @@ func (l Localized) Get(lang string) string {
 }
 
 type Param struct {
-	Name  string
-	Gen   string
-	Value string
+	Name   string
+	Gen    string
+	Value  string
+	Base   string
+	Prefix int
+	Subnet string
+	Index  *int
+	Range  []int
+	Of     []string
+	Min    *int
+	Max    *int
 }
 
 type Params []Param
 
 type paramSpec struct {
-	Gen   string `yaml:"gen"`
-	Value string `yaml:"value"`
+	Gen    string   `yaml:"gen"`
+	Value  string   `yaml:"value"`
+	Base   string   `yaml:"base"`
+	Prefix int      `yaml:"prefix"`
+	Subnet string   `yaml:"subnet"`
+	Index  *int     `yaml:"index"`
+	Range  []int    `yaml:"range"`
+	Of     []string `yaml:"of"`
+	Min    *int     `yaml:"min"`
+	Max    *int     `yaml:"max"`
 }
 
 func (p *Params) UnmarshalYAML(b []byte) error {
@@ -55,24 +71,22 @@ func (p *Params) UnmarshalYAML(b []byte) error {
 			return fmt.Errorf("param name %v is not a string", item.Key)
 		}
 		spec := specs[name]
-		params = append(params, Param{Name: name, Gen: spec.Gen, Value: spec.Value})
+		params = append(params, Param{
+			Name:   name,
+			Gen:    spec.Gen,
+			Value:  spec.Value,
+			Base:   spec.Base,
+			Prefix: spec.Prefix,
+			Subnet: spec.Subnet,
+			Index:  spec.Index,
+			Range:  spec.Range,
+			Of:     spec.Of,
+			Min:    spec.Min,
+			Max:    spec.Max,
+		})
 	}
 	*p = params
 	return nil
-}
-
-func (p Params) Resolve() (map[string]string, error) {
-	resolved := make(map[string]string, len(p))
-	var errs []error
-	for _, param := range p {
-		value, err := Render(param.Value, resolved)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("param %s: %w", param.Name, err))
-			continue
-		}
-		resolved[param.Name] = value
-	}
-	return resolved, errors.Join(errs...)
 }
 
 func ParamsEnv(params map[string]string) map[string]string {
@@ -84,35 +98,85 @@ func ParamsEnv(params map[string]string) map[string]string {
 }
 
 type Checkpoint struct {
-	Id      string    `yaml:"id"`
-	Title   Localized `yaml:"title"`
-	Node    string    `yaml:"node"`
-	Script  string    `yaml:"script"`
-	Visible bool      `yaml:"visible"`
+	Id       string    `yaml:"id"`
+	Title    Localized `yaml:"title"`
+	Node     string    `yaml:"node"`
+	Script   string    `yaml:"script"`
+	Visible  bool      `yaml:"visible"`
+	Requires []string  `yaml:"requires"`
+}
+
+type checkpointSpec struct {
+	Id       string    `yaml:"id"`
+	Title    Localized `yaml:"title"`
+	Node     string    `yaml:"node"`
+	Script   string    `yaml:"script"`
+	Visible  *bool     `yaml:"visible"`
+	Requires []string  `yaml:"requires"`
+}
+
+func (c *Checkpoint) UnmarshalYAML(b []byte) error {
+	var spec checkpointSpec
+	if err := yaml.UnmarshalWithOptions(b, &spec, yaml.Strict()); err != nil {
+		return err
+	}
+	*c = Checkpoint{
+		Id:       spec.Id,
+		Title:    spec.Title,
+		Node:     spec.Node,
+		Script:   spec.Script,
+		Visible:  spec.Visible == nil || *spec.Visible,
+		Requires: spec.Requires,
+	}
+	return nil
+}
+
+type TutorialStep struct {
+	Checkpoint  string    `yaml:"checkpoint"`
+	Instruction Localized `yaml:"instruction"`
+}
+
+type Precheck struct {
+	Script  string `yaml:"script"`
+	Retries int    `yaml:"retries"`
 }
 
 type Lab struct {
-	Id               string       `yaml:"id"`
-	Version          int          `yaml:"version"`
-	Title            Localized    `yaml:"title"`
-	Topic            string       `yaml:"topic"`
-	Level            int          `yaml:"level"`
-	Modes            []string     `yaml:"modes"`
-	Environment      string       `yaml:"environment"`
-	EstimatedMinutes int          `yaml:"estimated_minutes"`
-	Ticket           Localized    `yaml:"ticket"`
-	Params           Params       `yaml:"params"`
-	Setup            string       `yaml:"setup"`
-	RelatedDocs      []string     `yaml:"related_docs"`
-	Checkpoints      []Checkpoint `yaml:"checkpoints"`
-	Solution         Localized    `yaml:"solution"`
+	Id               string         `yaml:"id"`
+	Version          int            `yaml:"version"`
+	Title            Localized      `yaml:"title"`
+	Topic            string         `yaml:"topic"`
+	Level            int            `yaml:"level"`
+	Modes            []string       `yaml:"modes"`
+	Environment      string         `yaml:"environment"`
+	EstimatedMinutes int            `yaml:"estimated_minutes"`
+	Ticket           Localized      `yaml:"ticket"`
+	Params           Params         `yaml:"params"`
+	Cases            []Case         `yaml:"cases"`
+	Precheck         *Precheck      `yaml:"precheck"`
+	Setup            string         `yaml:"setup"`
+	RelatedDocs      []string       `yaml:"related_docs"`
+	Checkpoints      []Checkpoint   `yaml:"checkpoints"`
+	Tutorial         []TutorialStep `yaml:"tutorial"`
+	Internet         *bool          `yaml:"internet"`
+	Solution         Localized      `yaml:"solution"`
 
 	Topology Topology `yaml:"-"`
 	Dir      string   `yaml:"-"`
+	caseErrs []error
+}
+
+func (l Lab) InternetEnabled() bool {
+	return l.Internet == nil || *l.Internet
 }
 
 type Node struct {
-	Role string `yaml:"role"`
+	Role string      `yaml:"role"`
+	K3s  *K3sOptions `yaml:"k3s"`
+}
+
+type K3sOptions struct {
+	Disable []string `yaml:"disable"`
 }
 
 type Endpoint struct {

@@ -53,6 +53,11 @@ type checkpointJSON struct {
 	FirstPassedAt *string `json:"first_passed_at"`
 }
 
+type resultCheckpointJSON struct {
+	checkpointJSON
+	Visible bool `json:"visible"`
+}
+
 type attemptJSON struct {
 	ID           string           `json:"id"`
 	LabID        string           `json:"lab_id"`
@@ -71,13 +76,13 @@ type attemptJSON struct {
 }
 
 type resultJSON struct {
-	AttemptID    string           `json:"attempt_id"`
-	Status       string           `json:"status"`
-	Lab          labSummary       `json:"lab"`
-	ElapsedMS    int64            `json:"elapsed_ms"`
-	CommandCount int              `json:"command_count"`
-	Checkpoints  []checkpointJSON `json:"checkpoints"`
-	Solution     string           `json:"solution"`
+	AttemptID    string                 `json:"attempt_id"`
+	Status       string                 `json:"status"`
+	Lab          labSummary             `json:"lab"`
+	ElapsedMS    int64                  `json:"elapsed_ms"`
+	CommandCount int                    `json:"command_count"`
+	Checkpoints  []resultCheckpointJSON `json:"checkpoints"`
+	Solution     string                 `json:"solution"`
 }
 
 func healthOf(h runner.Health) healthJSON {
@@ -131,7 +136,7 @@ func attemptOf(view attempt.View, lang string) attemptJSON {
 		Lab:          labSummaryOf(view.Lab, lang),
 		Ticket:       view.Ticket(lang),
 		Nodes:        nodesOf(view),
-		Checkpoints:  checkpointsOf(view, lang),
+		Checkpoints:  visibleCheckpointsOf(view, lang),
 		ElapsedMS:    view.ElapsedMS,
 		StartedAt:    formatTimePtr(view.StartedAt),
 		EndedAt:      formatTimePtr(view.EndedAt),
@@ -147,7 +152,7 @@ func resultOf(view attempt.View, lang string, commandCount int, solution string)
 		Lab:          labSummaryOf(view.Lab, lang),
 		ElapsedMS:    view.ElapsedMS,
 		CommandCount: commandCount,
-		Checkpoints:  checkpointsOf(view, lang),
+		Checkpoints:  allCheckpointsOf(view, lang),
 		Solution:     solution,
 	}
 }
@@ -160,15 +165,30 @@ func nodesOf(view attempt.View) []nodeJSON {
 	return nodes
 }
 
-func checkpointsOf(view attempt.View, lang string) []checkpointJSON {
+func checkpointOf(cp attempt.Checkpoint, lang string) checkpointJSON {
+	return checkpointJSON{
+		ID:            cp.Id,
+		Title:         cp.Title.Get(lang),
+		Status:        cp.Status,
+		FirstPassedAt: formatTimePtr(cp.FirstPassedAt),
+	}
+}
+
+func visibleCheckpointsOf(view attempt.View, lang string) []checkpointJSON {
 	checkpoints := make([]checkpointJSON, 0, len(view.Checkpoints))
 	for _, cp := range view.Checkpoints {
-		checkpoints = append(checkpoints, checkpointJSON{
-			ID:            cp.Id,
-			Title:         cp.Title.Get(lang),
-			Status:        cp.Status,
-			FirstPassedAt: formatTimePtr(cp.FirstPassedAt),
-		})
+		if !cp.Visible {
+			continue
+		}
+		checkpoints = append(checkpoints, checkpointOf(cp, lang))
+	}
+	return checkpoints
+}
+
+func allCheckpointsOf(view attempt.View, lang string) []resultCheckpointJSON {
+	checkpoints := make([]resultCheckpointJSON, 0, len(view.Checkpoints))
+	for _, cp := range view.Checkpoints {
+		checkpoints = append(checkpoints, resultCheckpointJSON{checkpointJSON: checkpointOf(cp, lang), Visible: cp.Visible})
 	}
 	return checkpoints
 }

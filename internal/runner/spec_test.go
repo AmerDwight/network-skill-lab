@@ -36,7 +36,7 @@ func TestSpecFromLab(t *testing.T) {
 	})
 	params := map[string]string{"subnet": "10.0.5.0/24"}
 
-	spec, err := SpecFromLab("att1", "nsl/node", lab, params, []byte("#!/bin/bash\n"))
+	spec, err := SpecFromLab("att1", "nsl/node", lab, content.Resolved{Params: params}, []byte("#!/bin/bash\n"))
 	if err != nil {
 		t.Fatalf("SpecFromLab: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestSpecFromLabIfaceOrder(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := SpecFromLab("att1", "nsl/node", testLab(test.links), nil, nil)
+			_, err := SpecFromLab("att1", "nsl/node", testLab(test.links), content.Resolved{}, nil)
 			if err == nil {
 				t.Fatal("want an error")
 			}
@@ -103,7 +103,7 @@ func TestSpecFromLabIfaceOrder(t *testing.T) {
 
 func TestSpecFromLabUnknownParam(t *testing.T) {
 	lab := testLab([]content.Link{link("web01", "eth1", "10.0.5.10/24", "db01", "eth1", "{{missing}}", "10.0.5.0/24")})
-	if _, err := SpecFromLab("att1", "nsl/node", lab, nil, nil); err == nil {
+	if _, err := SpecFromLab("att1", "nsl/node", lab, content.Resolved{}, nil); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -122,5 +122,44 @@ func TestIfacesEnv(t *testing.T) {
 	}
 	if got := spec.IfacesEnv("absent"); got != "" {
 		t.Errorf("absent = %q, want empty", got)
+	}
+}
+
+func TestSpecFromLabInternet(t *testing.T) {
+	lab := testLab(nil)
+	off := false
+	tests := []struct {
+		name     string
+		internet *bool
+		want     bool
+	}{
+		{"unset defaults to on", nil, true},
+		{"explicitly off", &off, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lab.Internet = tt.internet
+			spec, err := SpecFromLab("att1", "nsl/node", lab, content.Resolved{}, nil)
+			if err != nil {
+				t.Fatalf("SpecFromLab: %v", err)
+			}
+			if spec.Internet != tt.want {
+				t.Errorf("Internet = %v, want %v", spec.Internet, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpecFromLabEnvIncludesSetupEnv(t *testing.T) {
+	resolved := content.Resolved{
+		Params:   map[string]string{"iface": "eth1"},
+		SetupEnv: map[string]string{"NSL_FAULT_MTU": "1200"},
+	}
+	spec, err := SpecFromLab("att1", "nsl/node", testLab(nil), resolved, nil)
+	if err != nil {
+		t.Fatalf("SpecFromLab: %v", err)
+	}
+	if spec.Env["NSL_IFACE"] != "eth1" || spec.Env["NSL_FAULT_MTU"] != "1200" {
+		t.Errorf("Env = %v", spec.Env)
 	}
 }

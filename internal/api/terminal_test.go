@@ -130,11 +130,17 @@ func TestTerminalReplacesPreviousConnection(t *testing.T) {
 
 	first := dialTerminal(t, h, id, "web01", "main")
 	firstPTY := h.runner.terminal(t, 0)
+	waitUntil(t, "the first terminal to be attached to its session", func() bool {
+		cols, rows := firstPTY.size()
+		return cols == defaultCols && rows == defaultRows
+	})
 
 	second := dialTerminal(t, h, id, "web01", "main")
 	secondPTY := h.runner.terminal(t, 1)
 
-	waitUntil(t, "the first pty to be closed", firstPTY.isClosed)
+	if !firstPTY.isClosed() {
+		t.Fatal("the replaced terminal is still open")
+	}
 
 	ctx, cancel := context.WithTimeout(t.Context(), waitTimeout)
 	defer cancel()

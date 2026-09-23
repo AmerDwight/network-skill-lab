@@ -29,6 +29,7 @@ type Store struct {
 	CheckpointRuns *CheckpointRuns
 	CommandLog     *CommandLog
 	Recordings     *Recordings
+	Progress       *Progress
 }
 
 func Open(dataDir string) (*Store, error) {
@@ -65,6 +66,7 @@ func Open(dataDir string) (*Store, error) {
 		CheckpointRuns: &CheckpointRuns{db: db},
 		CommandLog:     &CommandLog{db: db},
 		Recordings:     &Recordings{db: db},
+		Progress:       &Progress{db: db},
 	}, nil
 }
 
@@ -98,6 +100,13 @@ func nullTime(t *time.Time) any {
 		return nil
 	}
 	return formatTime(*t)
+}
+
+func nullInt64(v *int64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }
 
 func nullString(s string) any {
