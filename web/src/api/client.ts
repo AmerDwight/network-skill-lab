@@ -96,3 +96,15 @@ export async function getCurrentAttempt(): Promise<Attempt | null> {
   }
   return json<Attempt>(response);
 }
+
+export async function getAttempt(id: string): Promise<Attempt> {
+  return json<Attempt>(await send(`/api/attempts/${encodeURIComponent(id)}`));
+}
+
+export async function abandonAttempt(id: string): Promise<Attempt> {
+  const response = await send(
+    `/api/attempts/${encodeURIComponent(id)}/abandon`,
+    { method: "POST" },
+  );
+  return json<Attempt>(response);
+}

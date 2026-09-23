@@ -36,15 +36,96 @@ export interface Lab extends LabSummary {
 export type AttemptStatus =
   "provisioning" | "running" | "passed" | "abandoned" | "expired" | "error";
 
+export type CheckpointStatus = "pending" | "pass" | "fail" | "error";
+
+export interface AttemptCheckpoint {
+  id: string;
+  title: string;
+  status: CheckpointStatus;
+  first_passed_at: string | null;
+}
+
 export interface Attempt {
   id: string;
   lab_id: string;
   mode: string;
   status: AttemptStatus;
+  error_message: string;
+  lab: LabSummary;
+  ticket: string;
+  nodes: LabNode[];
+  checkpoints: AttemptCheckpoint[];
   elapsed_ms: number;
+  started_at: string | null;
+  ended_at: string | null;
   server_time: string;
   created_at: string;
 }
+
+export type ProvisioningStep =
+  "networks" | "containers" | "bootstrap" | "setup";
+
+export const provisioningSteps: readonly ProvisioningStep[] = [
+  "networks",
+  "containers",
+  "bootstrap",
+  "setup",
+];
+
+export interface AttemptStatusEvent {
+  type: "status";
+  status: AttemptStatus;
+  error_message: string;
+  elapsed_ms: number;
+  server_time: string;
+}
+
+export interface AttemptProvisioningEvent {
+  type: "provisioning";
+  step: ProvisioningStep;
+}
+
+export interface AttemptCheckpointEvent {
+  type: "checkpoint";
+  id: string;
+  status: CheckpointStatus;
+  first_passed_at: string | null;
+}
+
+export interface AttemptTickEvent {
+  type: "tick";
+  elapsed_ms: number;
+  server_time: string;
+}
+
+export interface AttemptErrorEvent {
+  type: "error";
+  message: string;
+}
+
+export type AttemptEvent =
+  | AttemptStatusEvent
+  | AttemptProvisioningEvent
+  | AttemptCheckpointEvent
+  | AttemptTickEvent
+  | AttemptErrorEvent;
+
+export interface TerminalResizeMessage {
+  type: "resize";
+  cols: number;
+  rows: number;
+}
+
+export interface TerminalExitMessage {
+  type: "exit";
+}
+
+export interface TerminalErrorMessage {
+  type: "error";
+  message: string;
+}
+
+export type TerminalServerMessage = TerminalExitMessage | TerminalErrorMessage;
 
 export interface CreateAttemptRequest {
   lab_id: string;
