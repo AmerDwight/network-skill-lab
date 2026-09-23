@@ -10,7 +10,10 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
-const tutorialMode = "tutorial"
+const (
+	ModeTutorial = "tutorial"
+	ModeReal     = "real"
+)
 
 type Node struct {
 	Name string
@@ -45,6 +48,7 @@ type View struct {
 	Nodes         []Node
 	Checkpoints   []Checkpoint
 	TutorialSteps []TutorialStep
+	SubmitCount   int
 	ElapsedMS     int64
 	StartedAt     *time.Time
 	EndedAt       *time.Time
@@ -109,6 +113,7 @@ func newView(att store.Attempt, lab content.Lab, resolved content.Resolved, runs
 		Nodes:         nodes,
 		Checkpoints:   checkpoints,
 		TutorialSteps: steps,
+		SubmitCount:   att.SubmitCount,
 		ElapsedMS:     elapsedMS(att, now),
 		StartedAt:     att.StartedAt,
 		EndedAt:       att.EndedAt,
@@ -119,7 +124,7 @@ func newView(att store.Attempt, lab content.Lab, resolved content.Resolved, runs
 }
 
 func tutorialSteps(mode string, lab content.Lab, params map[string]string) ([]TutorialStep, error) {
-	if mode != tutorialMode || len(lab.Tutorial) == 0 {
+	if mode != ModeTutorial || len(lab.Tutorial) == 0 {
 		return nil, nil
 	}
 	steps := make([]TutorialStep, 0, len(lab.Tutorial))

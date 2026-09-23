@@ -65,6 +65,32 @@ func labErrf(lab *Lab, field, format string, args ...any) error {
 	return fmt.Errorf("%s: %s: %s", lab.Dir, field, fmt.Sprintf(format, args...))
 }
 
+type paramSet struct {
+	caseID string
+	params map[string]string
+}
+
+func (p paramSet) errf(lab *Lab, field, format string, args ...any) error {
+	message := fmt.Sprintf(format, args...)
+	if p.caseID == "" {
+		return labErrf(lab, field, "%s", message)
+	}
+	return labErrf(lab, field, "case %s: %s", p.caseID, message)
+}
+
+func paramSets(lab *Lab) []paramSet {
+	if len(lab.Cases) == 0 {
+		params, _ := lab.Params.Resolve(validationSeed)
+		return []paramSet{{params: params}}
+	}
+	sets := make([]paramSet, 0, len(lab.Cases))
+	for _, entry := range lab.Cases {
+		params, _ := mergeParams(lab.Params, entry.Params).Resolve(validationSeed)
+		sets = append(sets, paramSet{caseID: entry.ID, params: params})
+	}
+	return sets
+}
+
 func checkID(lab *Lab) []error {
 	if name := filepath.Base(lab.Dir); lab.Id != name {
 		return []error{labErrf(lab, "id", "%q does not match directory name %q", lab.Id, name)}
@@ -118,18 +144,19 @@ func checkParams(lab *Lab) []error {
 }
 
 func checkTicket(lab *Lab) []error {
-	params, _ := lab.Params.Resolve(validationSeed)
 	var errs []error
-	for _, field := range localizedFields("ticket", lab.Ticket) {
-		if _, err := Render(field.text, params); err != nil {
-			errs = append(errs, labErrf(lab, field.name, "%v", err))
+	for _, set := range paramSets(lab) {
+		for _, field := range localizedFields("ticket", lab.Ticket) {
+			if _, err := Render(field.text, set.params); err != nil {
+				errs = append(errs, set.errf(lab, field.name, "%v", err))
+			}
 		}
 	}
 	return errs
 }
 
 func checkCheckpoints(lab *Lab) []error {
-	params, _ := lab.Params.Resolve(validationSeed)
+	sets := paramSets(lab)
 	var errs []error
 	seen := map[string]bool{}
 	for i, cp := range lab.Checkpoints {
@@ -141,9 +168,11 @@ func checkCheckpoints(lab *Lab) []error {
 		if _, ok := lab.Topology.Nodes[cp.Node]; !ok {
 			errs = append(errs, labErrf(lab, field+".node", "node %q is not declared in topology.yaml", cp.Node))
 		}
-		for _, title := range localizedFields(field+".title", cp.Title) {
-			if _, err := Render(title.text, params); err != nil {
-				errs = append(errs, labErrf(lab, title.name, "%v", err))
+		for _, set := range sets {
+			for _, title := range localizedFields(field+".title", cp.Title) {
+				if _, err := Render(title.text, set.params); err != nil {
+					errs = append(errs, set.errf(lab, title.name, "%v", err))
+				}
 			}
 		}
 	}
@@ -186,7 +215,7 @@ func checkRoles(lab *Lab) []error {
 }
 
 func checkLinks(lab *Lab) []error {
-	params, _ := lab.Params.Resolve(validationSeed)
+	sets := paramSets(lab)
 	var errs []error
 	for i, link := range lab.Topology.Links {
 		field := fmt.Sprintf("links[%d]", i)
@@ -203,45 +232,51 @@ func checkLinks(lab *Lab) []error {
 			}
 			nodes = append(nodes, endpoint.Node)
 		}
-		errs = append(errs, checkAddresses(lab, field, link, nodes, params)...)
+		for _, node := range slices.Sorted(maps.Keys(link.Addresses)) {
+			if !slices.Contains(nodes, node) {
+				errs = append(errs, labErrf(lab, field+".addresses", "node %q is not an endpoint of this link", node))
+			}
+		}
+		for _, node := range nodes {
+			if _, ok := link.Addresses[node]; !ok {
+				errs = append(errs, labErrf(lab, field+".addresses", "node %q has no address", node))
+			}
+		}
+		for _, set := range sets {
+			errs = append(errs, checkAddresses(lab, field, link, nodes, set)...)
+		}
 	}
 	return errs
 }
 
-func checkAddresses(lab *Lab, field string, link Link, nodes []string, params map[string]string) []error {
-	rendered, err := Render(link.Subnet, params)
+func checkAddresses(lab *Lab, field string, link Link, nodes []string, set paramSet) []error {
+	rendered, err := Render(link.Subnet, set.params)
 	if err != nil {
-		return []error{labErrf(lab, field+".subnet", "%v", err)}
+		return []error{set.errf(lab, field+".subnet", "%v", err)}
 	}
 	subnet, err := netip.ParsePrefix(rendered)
 	if err != nil {
-		return []error{labErrf(lab, field+".subnet", "%v", err)}
+		return []error{set.errf(lab, field+".subnet", "%v", err)}
 	}
 
 	var errs []error
-	for _, node := range slices.Sorted(maps.Keys(link.Addresses)) {
-		if !slices.Contains(nodes, node) {
-			errs = append(errs, labErrf(lab, field+".addresses", "node %q is not an endpoint of this link", node))
-		}
-	}
 	for _, node := range nodes {
 		value, ok := link.Addresses[node]
 		if !ok {
-			errs = append(errs, labErrf(lab, field+".addresses", "node %q has no address", node))
 			continue
 		}
-		rendered, err := Render(value, params)
+		rendered, err := Render(value, set.params)
 		if err != nil {
-			errs = append(errs, labErrf(lab, field+".addresses."+node, "%v", err))
+			errs = append(errs, set.errf(lab, field+".addresses."+node, "%v", err))
 			continue
 		}
 		address, err := netip.ParsePrefix(rendered)
 		if err != nil {
-			errs = append(errs, labErrf(lab, field+".addresses."+node, "%v", err))
+			errs = append(errs, set.errf(lab, field+".addresses."+node, "%v", err))
 			continue
 		}
 		if !subnet.Contains(address.Addr()) {
-			errs = append(errs, labErrf(lab, field+".addresses."+node, "%s is outside subnet %s", rendered, subnet))
+			errs = append(errs, set.errf(lab, field+".addresses."+node, "%s is outside subnet %s", rendered, subnet))
 		}
 	}
 	return errs

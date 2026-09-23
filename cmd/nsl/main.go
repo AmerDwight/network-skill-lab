@@ -139,8 +139,7 @@ func serve(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load content: %w", err)
 	}
-	labs := loaded.Labs
-	logger.Info("content loaded", "labs", len(labs), "docs", len(loaded.Docs), "topics", len(loaded.Topics), "tracks", len(loaded.Tracks), "dir", cfg.ContentDir)
+	logger.Info("content loaded", "labs", len(loaded.Labs), "docs", len(loaded.Docs), "topics", len(loaded.Topics), "tracks", len(loaded.Tracks), "dir", cfg.ContentDir)
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
@@ -167,7 +166,7 @@ func serve(args []string) error {
 	attempts := attempt.New(attempt.Deps{
 		Store:       st,
 		Runner:      provider,
-		Labs:        labs,
+		Content:     loaded,
 		Image:       cfg.NodeImage,
 		RunnerID:    "docker",
 		IdleTimeout: cfg.IdleTimeout,
@@ -183,6 +182,7 @@ func serve(args []string) error {
 		Logger:   logger,
 	})
 	defer checks.Close()
+	attempts.SetSweeper(checks)
 
 	recordings := recorder.New(recorder.Deps{
 		Store:    st,
@@ -205,7 +205,7 @@ func serve(args []string) error {
 
 	handler := web.NewRouter(api.New(api.Deps{
 		Attempts: attempts,
-		Labs:     labs,
+		Content:  loaded,
 		Store:    st,
 		Runner:   provider,
 		Recorder: recordings,

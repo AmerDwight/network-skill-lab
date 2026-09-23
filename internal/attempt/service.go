@@ -38,14 +38,18 @@ var (
 	ErrNotFound       = errors.New("attempt not found")
 	ErrTerminal       = errors.New("attempt has already ended")
 	ErrNotTerminal    = errors.New("attempt has not ended yet")
+	ErrProvisioning   = errors.New("attempt is still provisioning")
 	ErrUnknownLab     = errors.New("unknown lab")
+	ErrUnknownDoc     = errors.New("unknown doc")
 	ErrModeNotAllowed = errors.New("mode not allowed by the lab")
+	ErrModeNotReal    = errors.New("attempt is not in real mode")
+	ErrNoSweeper      = errors.New("no checker is wired to the attempt service")
 )
 
 type Deps struct {
 	Store        *store.Store
 	Runner       runner.Runner
-	Labs         []content.Lab
+	Content      *content.Content
 	Image        string
 	RunnerID     string
 	IdleTimeout  time.Duration
@@ -56,10 +60,15 @@ type Deps struct {
 	Logger       *slog.Logger
 }
 
+type Sweeper interface {
+	SweepNow(ctx context.Context, id string) (map[string]string, error)
+}
+
 type Service struct {
 	store        *store.Store
 	runner       runner.Runner
 	labs         map[string]content.Lab
+	docs         map[string]content.Doc
 	image        string
 	runnerID     string
 	idleTimeout  time.Duration
@@ -80,6 +89,9 @@ type Service struct {
 
 	hooksMu sync.Mutex
 	hooks   []BeforeDestroyFunc
+
+	sweeperMu sync.Mutex
+	sweeper   Sweeper
 }
 
 type BeforeDestroyFunc func(ctx context.Context, v View)
@@ -103,9 +115,16 @@ func (t *tracker) close() {
 }
 
 func New(deps Deps) *Service {
-	labs := make(map[string]content.Lab, len(deps.Labs))
-	for _, lab := range deps.Labs {
+	if deps.Content == nil {
+		deps.Content = &content.Content{}
+	}
+	labs := make(map[string]content.Lab, len(deps.Content.Labs))
+	for _, lab := range deps.Content.Labs {
 		labs[lab.Id] = lab
+	}
+	docs := make(map[string]content.Doc, len(deps.Content.Docs))
+	for _, doc := range deps.Content.Docs {
+		docs[doc.ID] = doc
 	}
 	if deps.IdleTimeout <= 0 {
 		deps.IdleTimeout = defaultIdleTimeout
@@ -131,6 +150,7 @@ func New(deps Deps) *Service {
 		store:        deps.Store,
 		runner:       deps.Runner,
 		labs:         labs,
+		docs:         docs,
 		image:        deps.Image,
 		runnerID:     deps.RunnerID,
 		idleTimeout:  deps.IdleTimeout,
@@ -158,6 +178,18 @@ func (s *Service) Close() {
 		s.wg.Wait()
 		s.bus.close()
 	})
+}
+
+func (s *Service) SetSweeper(sweeper Sweeper) {
+	s.sweeperMu.Lock()
+	defer s.sweeperMu.Unlock()
+	s.sweeper = sweeper
+}
+
+func (s *Service) currentSweeper() Sweeper {
+	s.sweeperMu.Lock()
+	defer s.sweeperMu.Unlock()
+	return s.sweeper
 }
 
 func (s *Service) OnBeforeDestroy(fn BeforeDestroyFunc) {
@@ -618,6 +650,12 @@ func (s *Service) end(ctx context.Context, id, status, errorMessage string, from
 	att.ErrorMessage = errorMessage
 	att.EndedAt = &now
 	att.ElapsedMS = elapsed.Milliseconds()
+
+	if status == store.StatusPassed {
+		if err := s.store.Progress.Upsert(ctx, att.UserID, store.ProgressLab, att.LabID); err != nil {
+			return store.Attempt{}, err
+		}
+	}
 
 	s.untrack(id)
 	s.runBeforeDestroy(ctx, att)

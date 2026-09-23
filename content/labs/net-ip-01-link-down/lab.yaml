@@ -3,7 +3,7 @@ version: 1
 title: { zh: "伺服器連不到對外", en: "Server lost connectivity" }
 topic: net/ip
 level: 2
-modes: [guided]
+modes: [guided, real]
 environment: container
 estimated_minutes: 10
 ticket:

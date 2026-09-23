@@ -47,7 +47,7 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	labs, err := content.Load(contentDir)
+	loaded, err := content.LoadAll(contentDir)
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}
@@ -62,7 +62,7 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 	attempts := attempt.New(attempt.Deps{
 		Store:    st,
 		Runner:   provider,
-		Labs:     labs,
+		Content:  loaded,
 		Image:    testImage,
 		RunnerID: "docker",
 		Logger:   logger,
@@ -71,6 +71,7 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 
 	checks := checker.New(checker.Deps{Store: st, Runner: provider, Attempts: attempts, Interval: time.Second, Logger: logger})
 	t.Cleanup(checks.Close)
+	attempts.SetSweeper(checks)
 	recordings := recorder.New(recorder.Deps{Store: st, Runner: provider, Attempts: attempts, Interval: time.Second, DataDir: dataDir, Logger: logger})
 	t.Cleanup(recordings.Close)
 
@@ -79,7 +80,7 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 
 	server := httptest.NewServer(api.New(api.Deps{
 		Attempts: attempts,
-		Labs:     labs,
+		Content:  loaded,
 		Store:    st,
 		Runner:   provider,
 		Recorder: recordings,
@@ -115,6 +116,32 @@ func (s *stack) request(t *testing.T, method, path, body string) map[string]any 
 		t.Fatalf("decode body %q: %v", raw, err)
 	}
 	decoded["_status"] = float64(resp.StatusCode)
+	return decoded
+}
+
+func (s *stack) requestArray(t *testing.T, method, path string) []any {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), method, s.server.URL+path, nil)
+	if err != nil {
+		t.Fatalf("build request %s %s: %v", method, path, err)
+	}
+	resp, err := s.server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("send request %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("%s %s: status = %d", method, path, resp.StatusCode)
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body of %s %s: %v", method, path, err)
+	}
+	var decoded []any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("decode body %q: %v", raw, err)
+	}
 	return decoded
 }
 

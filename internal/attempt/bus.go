@@ -10,6 +10,7 @@ const (
 	EventStatus       = "status"
 	EventProvisioning = "provisioning"
 	EventCheckpoint   = "checkpoint"
+	EventSubmit       = "submit"
 	EventTick         = "tick"
 	EventError        = "error"
 )
@@ -32,6 +33,9 @@ type Event struct {
 	Step         string
 	Attempt      int
 	ElapsedMS    int64
+	SubmitCount  int
+	HiddenFailed int
+	Passed       bool
 	ServerTime   time.Time
 	Checkpoint   *CheckpointEvent
 }

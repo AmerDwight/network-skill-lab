@@ -115,7 +115,7 @@ func TestPrecheckRespawnsUntilTheSandboxFitsTheCase(t *testing.T) {
 	svc := attempt.New(attempt.Deps{
 		Store:    st,
 		Runner:   provider,
-		Labs:     labs,
+		Content:  &content.Content{Labs: labs},
 		Image:    testImage,
 		RunnerID: "docker",
 		Logger:   logger,

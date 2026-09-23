@@ -43,6 +43,12 @@ func newHarnessWithContent(t *testing.T, fr *fakeRunner, dir string) *harness {
 	if err != nil {
 		t.Fatalf("load content: %v", err)
 	}
+	return newHarnessFor(t, fr, &content.Content{Labs: labs})
+}
+
+func newHarnessFor(t *testing.T, fr *fakeRunner, loaded *content.Content) *harness {
+	t.Helper()
+
 	st, err := store.Open(t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -58,7 +64,7 @@ func newHarnessWithContent(t *testing.T, fr *fakeRunner, dir string) *harness {
 	svc := New(Deps{
 		Store:        st,
 		Runner:       fr,
-		Labs:         labs,
+		Content:      loaded,
 		Image:        "nsl/node",
 		RunnerID:     "fake",
 		IdleTimeout:  testIdleTimeout,
@@ -73,7 +79,7 @@ func newHarnessWithContent(t *testing.T, fr *fakeRunner, dir string) *harness {
 	events, unsubscribe := svc.SubscribeAll()
 	t.Cleanup(unsubscribe)
 
-	return &harness{Service: svc, clock: clock, runner: fr, store: st, lab: labs[0], user: user.ID, events: events}
+	return &harness{Service: svc, clock: clock, runner: fr, store: st, lab: loaded.Labs[0], user: user.ID, events: events}
 }
 
 func (h *harness) next(t *testing.T) Event {

@@ -193,6 +193,7 @@ func checkTutorial(lab *Lab) []error {
 		return append(errs, labErrf(lab, "tutorial", "must not be empty when modes contains %q", tutorialMode))
 	}
 
+	sets := paramSets(lab)
 	position := map[string]int{}
 	for i, step := range lab.Tutorial {
 		field := fmt.Sprintf("tutorial[%d]", i)
@@ -207,6 +208,12 @@ func checkTutorial(lab *Lab) []error {
 		for _, instruction := range localizedFields(field+".instruction", step.Instruction) {
 			if instruction.text == "" {
 				errs = append(errs, labErrf(lab, instruction.name, "must not be empty"))
+				continue
+			}
+			for _, set := range sets {
+				if _, err := Render(instruction.text, set.params); err != nil {
+					errs = append(errs, set.errf(lab, instruction.name, "%v", err))
+				}
 			}
 		}
 	}

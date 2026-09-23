@@ -27,6 +27,13 @@ type checkpointMessage struct {
 	FirstPassedAt *string `json:"first_passed_at"`
 }
 
+type submitMessage struct {
+	Type         string `json:"type"`
+	Passed       bool   `json:"passed"`
+	HiddenFailed int    `json:"hidden_failed"`
+	SubmitCount  int    `json:"submit_count"`
+}
+
 type tickMessage struct {
 	Type       string `json:"type"`
 	ElapsedMS  int64  `json:"elapsed_ms"`
@@ -90,7 +97,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 				sock.shutdown("server shutting down")
 				return
 			}
-			message, ok := eventMessage(ev)
+			message, ok := eventMessage(ev, view.Mode)
 			if !ok {
 				continue
 			}
@@ -105,7 +112,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func eventMessage(ev attempt.Event) (any, bool) {
+func eventMessage(ev attempt.Event, mode string) (any, bool) {
 	switch ev.Type {
 	case attempt.EventStatus:
 		return statusMessage{
@@ -118,7 +125,7 @@ func eventMessage(ev attempt.Event) (any, bool) {
 	case attempt.EventProvisioning:
 		return provisioningMessage{Type: attempt.EventProvisioning, Step: ev.Step, Attempt: ev.Attempt}, true
 	case attempt.EventCheckpoint:
-		if ev.Checkpoint == nil {
+		if ev.Checkpoint == nil || mode == attempt.ModeReal {
 			return nil, false
 		}
 		return checkpointMessage{
@@ -126,6 +133,13 @@ func eventMessage(ev attempt.Event) (any, bool) {
 			ID:            ev.Checkpoint.Id,
 			Status:        ev.Checkpoint.Status,
 			FirstPassedAt: formatTimePtr(ev.Checkpoint.FirstPassedAt),
+		}, true
+	case attempt.EventSubmit:
+		return submitMessage{
+			Type:         attempt.EventSubmit,
+			Passed:       ev.Passed,
+			HiddenFailed: ev.HiddenFailed,
+			SubmitCount:  ev.SubmitCount,
 		}, true
 	case attempt.EventTick:
 		return tickMessage{

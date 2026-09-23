@@ -22,7 +22,7 @@ func TestLoadRealContent(t *testing.T) {
 	if lab.Title.Get("en") != "Server lost connectivity" {
 		t.Errorf("Title.Get(en) = %q", lab.Title.Get("en"))
 	}
-	if !slices.Equal(lab.Modes, []string{"guided"}) {
+	if !slices.Equal(lab.Modes, []string{"guided", "real"}) {
 		t.Errorf("Modes = %v", lab.Modes)
 	}
 
