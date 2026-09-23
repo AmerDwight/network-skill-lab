@@ -154,6 +154,30 @@ func TestTerminalReplacesPreviousConnection(t *testing.T) {
 	}
 }
 
+func TestTerminalClosesATerminalOpenedAfterItsSessionWasReplaced(t *testing.T) {
+	h := newHarness(t)
+	id := h.running()
+	release := h.runner.holdTerminals()
+
+	first := dialTerminal(t, h, id, "web01", "main")
+	firstPTY := h.runner.terminal(t, 0)
+
+	dialTerminal(t, h, id, "web01", "main")
+	secondPTY := h.runner.terminal(t, 1)
+
+	ctx, cancel := context.WithTimeout(t.Context(), waitTimeout)
+	defer cancel()
+	if _, _, err := first.Read(ctx); err == nil {
+		t.Fatal("the replaced connection is still readable")
+	}
+
+	release()
+	waitUntil(t, "the terminal of the replaced session to be closed", firstPTY.isClosed)
+	if secondPTY.isClosed() {
+		t.Error("the replacing terminal was closed")
+	}
+}
+
 func TestTerminalDisconnectsSlowClient(t *testing.T) {
 	h := newHarness(t)
 	id := h.running()

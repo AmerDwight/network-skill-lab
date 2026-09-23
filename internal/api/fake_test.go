@@ -177,6 +177,7 @@ type fakeRunner struct {
 	health  runner.Health
 	steps   []string
 	gate    chan struct{}
+	opening chan struct{}
 }
 
 var _ runner.Runner = (*fakeRunner)(nil)
@@ -219,14 +220,33 @@ func (f *fakeRunner) Provision(ctx context.Context, spec runner.SandboxSpec) (ru
 	return runner.SandboxID(spec.AttemptID), nil
 }
 
+func (f *fakeRunner) holdTerminals() func() {
+	opening := make(chan struct{})
+	f.mu.Lock()
+	f.opening = opening
+	f.mu.Unlock()
+	return func() {
+		f.mu.Lock()
+		f.opening = nil
+		f.mu.Unlock()
+		close(opening)
+	}
+}
+
 func (f *fakeRunner) OpenTerminal(_ context.Context, _ runner.SandboxID, _ string) (runner.PTY, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	if f.openErr != nil {
+		f.mu.Unlock()
 		return nil, f.openErr
 	}
 	pty := newFakePTY()
 	f.ptys = append(f.ptys, pty)
+	opening := f.opening
+	f.mu.Unlock()
+
+	if opening != nil {
+		<-opening
+	}
 	return pty, nil
 }
 

@@ -47,22 +47,31 @@ type terminalSession struct {
 	socket *socket
 	cancel context.CancelFunc
 
-	once sync.Once
-	mu   sync.Mutex
-	pty  runner.PTY
-	cast *recorder.Cast
+	once   sync.Once
+	mu     sync.Mutex
+	pty    runner.PTY
+	cast   *recorder.Cast
+	closed bool
 }
 
-func (t *terminalSession) attach(pty runner.PTY, cast *recorder.Cast) {
+func (t *terminalSession) attach(pty runner.PTY, cast *recorder.Cast) bool {
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	if t.closed {
+		t.mu.Unlock()
+		_ = pty.Close()
+		_ = cast.Close()
+		return false
+	}
 	t.pty, t.cast = pty, cast
+	t.mu.Unlock()
+	return true
 }
 
 func (t *terminalSession) close() {
 	t.once.Do(func() {
 		t.mu.Lock()
 		pty, cast := t.pty, t.cast
+		t.closed = true
 		t.mu.Unlock()
 		if pty != nil {
 			_ = pty.Close()
@@ -165,7 +174,9 @@ func (s *server) terminal(w http.ResponseWriter, r *http.Request) {
 		sock.shutdown("recording unavailable")
 		return
 	}
-	session.attach(pty, cast)
+	if !session.attach(pty, cast) {
+		return
+	}
 
 	if err := pty.Resize(defaultCols, defaultRows); err != nil {
 		s.log.Warn("resize terminal", "attempt", id, "node", node, "error", err)
