@@ -1,2 +1,7 @@
 .codegraph/
 .claude/settings.local.json
+bin/
+data/
+web/node_modules/
+web/dist/
+internal/web/dist/
