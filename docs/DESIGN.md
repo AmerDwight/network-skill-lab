@@ -231,6 +231,7 @@ v1 Docker provider 的實作（Phase 0 實證）：
 - link network 不用 `--internal`（其 `DOCKER-INTERNAL` 規則會擋掉經由 gateway 節點轉送的封包），改用 `inhibit_ipv4=true` + `gateway_mode_ipv4=routed` + `enable_ip_masquerade=false`：bridge 不配位址，host 就沒有進入 link 網段的路由，link 流量不做 NAT 也沒有對外出口；端點再以較低的 `GwPriority` 確保 default route 仍留在 mgmt。
 - 建容器時只接 mgmt，啟動後依 topology 宣告順序逐一 `docker network connect`，eth1、eth2 的順序即宣告順序。
 - 節點只建立與銷毀，不 restart：restart 後 Docker 重接網路的順序不保證，且會蓋回 resolv.conf。若日後需要，改用 netplan `match: {macaddress}` + `set-name` 綁 MAC。
+- k3s 節點至少要在一條 link 上（沒有 link 時 networkd-wait-online 會拖住 k3s 約兩分鐘）；`internet: false` 時 mgmt 為 internal，link 網路本身從不 NAT 出網。
 - bootstrap 把 Docker 配的位址寫進 netplan 交給 networkd（方案 A），之後題目可自由 `netplan apply`、改 IP，Docker 不會干預。
 未來 containerlab provider 可直接讀這份格式。
 
@@ -388,7 +389,7 @@ docs/                   本文件與後續 ADR
 |---|---|---|---|
 | 0 | spike | 風險驗證（§7） | R1 到 R5 有實測結果 |
 | 1 | 正式 | 核心：all-in-one binary、Docker provider、terminal 多分頁、timer、checker、SQLite、1 個 fixture lab | 能從瀏覽器完整跑完一題 guided 模式。**2026-09-23 完成**，見 `docs/PHASE1-RESULTS.md` |
-| 2 | 正式 | 內容系統：docs 面板、tracks、tutorial / real 模式、params 隨機化、precheck、`content lint` | 不改程式碼就能新增 lab / doc / track；§3.9 每個擴充點至少有一個 fixture lab 覆蓋（預計 net × 3、k3s × 2） |
+| 2 | 正式 | 內容系統：docs 面板、tracks、tutorial / real 模式、params 隨機化、precheck、`content lint` | 不改程式碼就能新增 lab / doc / track；§3.9 每個擴充點至少有一個 fixture lab 覆蓋（net × 3、k3s × 2）。**2026-09-23 完成**，見 `docs/PHASE2-RESULTS.md` |
 | 3 | 正式 | 帳號 admin/user、歷史紀錄頁、錄製回放 | 多帳號可各自練習並回看 |
 | 4 | 正式 | 遠端 runner | 成員自架 runner 可接上 |
 | 4 | spike → 正式 | VM provider（libvirt + KVM 巢狀虛擬化、cloud-init 開機時間先驗） | VM 環境的 lab 可跑完 |
