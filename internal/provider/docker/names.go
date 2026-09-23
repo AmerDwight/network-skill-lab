@@ -6,6 +6,7 @@ const (
 	labelManaged = "nsl.managed"
 	labelAttempt = "nsl.attempt"
 	labelNode    = "nsl.node"
+	labelRole    = "nsl.role"
 
 	namePrefix  = "nsl-"
 	mgmtSuffix  = "-mgmt"
@@ -28,9 +29,10 @@ func attemptLabels(attempt string) map[string]string {
 	return map[string]string{labelManaged: "true", labelAttempt: attempt}
 }
 
-func nodeLabels(attempt, node string) map[string]string {
+func nodeLabels(attempt, node, role string) map[string]string {
 	labels := attemptLabels(attempt)
 	labels[labelNode] = node
+	labels[labelRole] = role
 	return labels
 }
 

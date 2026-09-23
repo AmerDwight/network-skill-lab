@@ -22,10 +22,14 @@ import (
 const (
 	bootstrapPath       = "/usr/local/sbin/nsl-bootstrap"
 	k3sContainerdDir    = "/var/lib/rancher/k3s/agent/containerd"
+	kubeconfigPath      = "/etc/rancher/k3s/k3s.yaml"
 	systemdTimeout      = 30 * time.Second
 	systemdPollInterval = 250 * time.Millisecond
 	bootstrapTimeout    = 2 * time.Minute
 	setupTimeout        = 60 * time.Second
+	k3sReadyTimeout     = 90 * time.Second
+	k3sPollInterval     = time.Second
+	kubectlTimeout      = 15 * time.Second
 	stderrTailLines     = 20
 )
 
@@ -66,6 +70,12 @@ func (p *Provider) provision(ctx context.Context, spec runner.SandboxSpec, log *
 	progress("bootstrap")
 	if err := p.bootstrap(ctx, spec, log); err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
+	}
+	if names := k3sNodeNames(spec); len(names) > 0 {
+		progress("k3s")
+		if err := p.waitK3sReady(ctx, spec, names, log); err != nil {
+			return fmt.Errorf("wait for k3s: %w", err)
+		}
 	}
 	progress("setup")
 	if err := p.runSetup(ctx, spec, log); err != nil {
@@ -109,7 +119,7 @@ func (p *Provider) createContainers(ctx context.Context, spec runner.SandboxSpec
 		config := &container.Config{
 			Image:      image,
 			Hostname:   node.Name,
-			Labels:     nodeLabels(spec.AttemptID, node.Name),
+			Labels:     nodeLabels(spec.AttemptID, node.Name, node.Role),
 			StopSignal: "SIGRTMIN+3",
 		}
 		hostConfig := &container.HostConfig{
@@ -183,15 +193,7 @@ func (p *Provider) bootstrap(ctx context.Context, spec runner.SandboxSpec, log *
 	server := k3sServerAddress(spec)
 
 	return forEachNode(spec.Nodes, func(node runner.NodeSpec) error {
-		env := map[string]string{
-			"NSL_NODE":   node.Name,
-			"NSL_ROLE":   node.Role,
-			"NSL_IFACES": spec.IfacesEnv(node.Name),
-		}
-		if isK3sRole(node.Role) {
-			env["NSL_K3S_TOKEN"] = token
-			env["NSL_K3S_SERVER"] = server
-		}
+		env := bootstrapEnv(spec, node, token, server)
 		name := containerName(spec.AttemptID, node.Name)
 		result, err := p.exec(ctx, name, []string{bootstrapPath}, runner.ExecOptions{Env: env, Timeout: bootstrapTimeout})
 		if err != nil {
@@ -205,6 +207,72 @@ func (p *Provider) bootstrap(ctx context.Context, spec runner.SandboxSpec, log *
 	})
 }
 
+func bootstrapEnv(spec runner.SandboxSpec, node runner.NodeSpec, token, server string) map[string]string {
+	env := map[string]string{
+		"NSL_NODE":   node.Name,
+		"NSL_ROLE":   node.Role,
+		"NSL_IFACES": spec.IfacesEnv(node.Name),
+	}
+	if isK3sRole(node.Role) {
+		env["NSL_K3S_TOKEN"] = token
+		env["NSL_K3S_SERVER"] = server
+	}
+	if node.Role == runner.RoleK3sServer {
+		env["NSL_K3S_DISABLE"] = strings.Join(node.K3sDisable, ",")
+	}
+	return env
+}
+
+func (p *Provider) waitK3sReady(ctx context.Context, spec runner.SandboxSpec, names []string, log *slog.Logger) error {
+	server := k3sServerNode(spec)
+	if server == "" {
+		return errors.New("spec has k3s nodes but no k3s-server")
+	}
+	name := containerName(spec.AttemptID, server)
+	opts := runner.ExecOptions{Env: map[string]string{"KUBECONFIG": kubeconfigPath}, Timeout: kubectlTimeout}
+	start := time.Now()
+	deadline := start.Add(k3sReadyTimeout)
+
+	var last string
+	for {
+		result, err := p.exec(ctx, name, []string{"kubectl", "get", "nodes", "--no-headers"}, opts)
+		if err != nil {
+			last = err.Error()
+		} else {
+			last = strings.TrimSpace(string(result.Stdout) + string(result.Stderr))
+			if nodesReady(last, names) {
+				log.Info("k3s nodes ready", "nodes", len(names), "duration", time.Since(start).Round(time.Millisecond))
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("nodes not ready within %s\n%s", k3sReadyTimeout, last)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(k3sPollInterval):
+		}
+	}
+}
+
+func nodesReady(output string, names []string) bool {
+	status := map[string]string{}
+	for line := range strings.Lines(output) {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		status[fields[0]] = fields[1]
+	}
+	for _, name := range names {
+		if status[name] != "Ready" {
+			return false
+		}
+	}
+	return true
+}
+
 func (p *Provider) runSetup(ctx context.Context, spec runner.SandboxSpec, log *slog.Logger) error {
 	if len(spec.Setup.Content) == 0 {
 		return nil
@@ -216,7 +284,7 @@ func (p *Provider) runSetup(ctx context.Context, spec runner.SandboxSpec, log *s
 		}
 		env["NSL_NODE"] = node.Name
 
-		opts := runner.ExecOptions{Env: env, Stdin: bytes.NewReader(spec.Setup.Content), Timeout: setupTimeout}
+		opts := runner.ExecOptions{Env: execEnv(node.Role, env), Stdin: bytes.NewReader(spec.Setup.Content), Timeout: setupTimeout}
 		name := containerName(spec.AttemptID, node.Name)
 		result, err := p.exec(ctx, name, []string{"bash", "-s"}, opts)
 		if err != nil {
@@ -260,7 +328,26 @@ func forEachNode(nodes []runner.NodeSpec, fn func(runner.NodeSpec) error) error 
 }
 
 func isK3sRole(role string) bool {
-	return role == "k3s-server" || role == "k3s-agent"
+	return role == runner.RoleK3sServer || role == "k3s-agent"
+}
+
+func k3sNodeNames(spec runner.SandboxSpec) []string {
+	var names []string
+	for _, node := range spec.Nodes {
+		if isK3sRole(node.Role) {
+			names = append(names, node.Name)
+		}
+	}
+	return names
+}
+
+func k3sServerNode(spec runner.SandboxSpec) string {
+	for _, node := range spec.Nodes {
+		if node.Role == runner.RoleK3sServer {
+			return node.Name
+		}
+	}
+	return ""
 }
 
 func k3sServerAddress(spec runner.SandboxSpec) string {

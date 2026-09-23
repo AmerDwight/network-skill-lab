@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -147,6 +148,45 @@ func TestSpecFromLabInternet(t *testing.T) {
 				t.Errorf("Internet = %v, want %v", spec.Internet, tt.want)
 			}
 		})
+	}
+}
+
+func TestSpecFromLabK3sDisable(t *testing.T) {
+	tests := []struct {
+		name string
+		node content.Node
+		want []string
+	}{
+		{"server without options", content.Node{Role: RoleK3sServer}, []string{"traefik", "metrics-server"}},
+		{"server with empty options", content.Node{Role: RoleK3sServer, K3s: &content.K3sOptions{}}, nil},
+		{"server disabling nothing", content.Node{Role: RoleK3sServer, K3s: &content.K3sOptions{Disable: []string{}}}, []string{}},
+		{"server with an explicit list", content.Node{Role: RoleK3sServer, K3s: &content.K3sOptions{Disable: []string{"metrics-server"}}}, []string{"metrics-server"}},
+		{"agent", content.Node{Role: "k3s-agent"}, nil},
+		{"ubuntu", content.Node{Role: "ubuntu"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lab := content.Lab{Topology: content.Topology{Nodes: map[string]content.Node{"k3s01": tt.node}}}
+			spec, err := SpecFromLab("att1", "nsl/node", lab, content.Resolved{}, nil)
+			if err != nil {
+				t.Fatalf("SpecFromLab: %v", err)
+			}
+			if !slices.Equal(spec.Nodes[0].K3sDisable, tt.want) {
+				t.Errorf("K3sDisable = %v, want %v", spec.Nodes[0].K3sDisable, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpecFromLabK3sDisableDefaultIsCopied(t *testing.T) {
+	lab := content.Lab{Topology: content.Topology{Nodes: map[string]content.Node{"k3s01": {Role: RoleK3sServer}}}}
+	spec, err := SpecFromLab("att1", "nsl/node", lab, content.Resolved{}, nil)
+	if err != nil {
+		t.Fatalf("SpecFromLab: %v", err)
+	}
+	spec.Nodes[0].K3sDisable[0] = "mutated"
+	if defaultK3sDisable[0] != "traefik" {
+		t.Errorf("defaultK3sDisable was mutated: %v", defaultK3sDisable)
 	}
 }
 
