@@ -519,14 +519,15 @@ func (s *Service) runBeforeDestroy(ctx context.Context, att store.Attempt) {
 		return
 	}
 
-	view, err := s.view(ctx, att)
+	hookCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.hookTimeout)
+	defer cancel()
+
+	view, err := s.view(hookCtx, att)
 	if err != nil {
 		s.log.Error("build the view for the before-destroy hooks", "attempt", att.ID, "error", err)
 		return
 	}
 
-	hookCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.hookTimeout)
-	defer cancel()
 	for _, hook := range hooks {
 		s.runHook(hookCtx, hook, view)
 	}
