@@ -43,9 +43,17 @@ func (p *Provider) Provision(ctx context.Context, spec runner.SandboxSpec) (runn
 }
 
 func (p *Provider) provision(ctx context.Context, spec runner.SandboxSpec, log *slog.Logger) error {
+	progress := func(step string) {
+		if spec.Progress != nil {
+			spec.Progress(step)
+		}
+	}
+
+	progress("networks")
 	if err := p.createNetworks(ctx, spec, log); err != nil {
 		return fmt.Errorf("create networks: %w", err)
 	}
+	progress("containers")
 	if err := p.createContainers(ctx, spec, log); err != nil {
 		return fmt.Errorf("create containers: %w", err)
 	}
@@ -55,9 +63,11 @@ func (p *Provider) provision(ctx context.Context, spec runner.SandboxSpec, log *
 	if err := p.waitSystemd(ctx, spec, log); err != nil {
 		return fmt.Errorf("wait for systemd: %w", err)
 	}
+	progress("bootstrap")
 	if err := p.bootstrap(ctx, spec, log); err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
+	progress("setup")
 	if err := p.runSetup(ctx, spec, log); err != nil {
 		return fmt.Errorf("run setup: %w", err)
 	}

@@ -11,10 +11,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AmerDwight/network-skill-lab/internal/attempt"
 	"github.com/AmerDwight/network-skill-lab/internal/config"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
+	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 	"github.com/AmerDwight/network-skill-lab/internal/web"
+	"github.com/docker/docker/client"
 )
 
 var version = "dev"
@@ -88,8 +91,33 @@ func serve(args []string) error {
 	}()
 	logger.Info("store opened", "path", st.Path())
 
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("create docker client: %w", err)
+	}
+	defer func() {
+		if err := cli.Close(); err != nil {
+			logger.Error("close docker client", "error", err)
+		}
+	}()
+
+	attempts := attempt.New(attempt.Deps{
+		Store:       st,
+		Runner:      docker.New(cli, docker.Options{Image: cfg.NodeImage}),
+		Labs:        labs,
+		Image:       cfg.NodeImage,
+		RunnerID:    "docker",
+		IdleTimeout: cfg.IdleTimeout,
+		Logger:      logger,
+	})
+	defer attempts.Close()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	if err := attempts.Recover(ctx); err != nil {
+		return fmt.Errorf("recover attempts: %w", err)
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
