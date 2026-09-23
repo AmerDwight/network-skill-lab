@@ -1,6 +1,7 @@
 VERSION ?= $(shell git describe --tags --always)
 GO_LDFLAGS := -X main.version=$(VERSION)
 WEB_DIST := internal/web/dist
+GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null || echo $(shell go env GOPATH)/bin/golangci-lint)
 
 .PHONY: all build web dev lint test test-integration image clean
 
@@ -23,7 +24,7 @@ dev: web
 		wait
 
 lint: web
-	golangci-lint run
+	$(GOLANGCI_LINT) run
 	cd web && npm run lint && npm run format:check && npm run typecheck
 
 test: web
@@ -31,7 +32,7 @@ test: web
 	cd web && npm run test
 
 test-integration: web
-	go test -tags integration ./...
+	go test -tags integration -p 1 ./...
 
 image:
 	docker build -t nsl/node images/node

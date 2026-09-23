@@ -28,6 +28,7 @@ type View struct {
 	Mode         string
 	Status       string
 	ErrorMessage string
+	SandboxID    string
 	Lab          content.Lab
 	Params       map[string]string
 	Nodes        []Node
@@ -84,6 +85,7 @@ func newView(att store.Attempt, lab content.Lab, params map[string]string, runs 
 		Mode:         att.Mode,
 		Status:       att.Status,
 		ErrorMessage: att.ErrorMessage,
+		SandboxID:    att.SandboxID,
 		Lab:          lab,
 		Params:       params,
 		Nodes:        nodes,
