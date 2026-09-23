@@ -285,6 +285,51 @@ links:
 </table></div>
 <p>WebSocket 的寫入有 buffer 上限（每連線 1 MB），超過則關閉連線並記 log，避免慢客戶端拖垮伺服器。</p>
 
+<h3>§10 補充：JSON 形狀（2026-09-23 planner 定稿，T7 與 T9 共同依據）</h3>
+<p>語言：所有回傳文字的端點接受 <code>?lang=zh-TW|zh|en</code>（<code>zh-TW</code> 與 <code>zh</code> 同義），缺省 zh。時間一律 UTC RFC 3339 毫秒。</p>
+<pre><code>GET /api/health
+{ "ok": bool, "docker": bool, "image": bool, "image_name": "nsl/node", "mem_available_mb": 3500, "error": "" }
+
+GET /api/labs            → [ LabSummary ]
+LabSummary = { "id", "title", "topic", "level", "modes": ["guided"], "estimated_minutes" }
+GET /api/labs/{id}       → LabSummary + { "nodes": [{ "name", "role" }], "checkpoints": [{ "id", "title" }] }
+
+POST /api/attempts  { "lab_id", "mode": "guided" }   → 201 Attempt | 409 error(code "attempt_active")
+GET  /api/attempts/current                           → 200 Attempt | 204
+GET  /api/attempts/{id}                              → 200 Attempt | 404
+POST /api/attempts/{id}/abandon                      → 200 Attempt（status abandoned）| 409 若已終態
+GET  /api/attempts/{id}/result                       → 200 Result | 409 若尚未終態
+
+Attempt = {
+  "id", "lab_id", "mode", "status",           status: provisioning|running|passed|abandoned|expired|error
+  "error_message": "",                        只有 error 有值
+  "lab": LabSummary,
+  "ticket": "已套 params 的工單文字",
+  "nodes": [{ "name", "role" }],
+  "checkpoints": [{ "id", "title", "status": "pending|pass|fail|error", "first_passed_at": null|time }],
+  "elapsed_ms": 0, "started_at": null|time, "ended_at": null|time,
+  "server_time": time, "created_at": time
+}
+Result = {
+  "attempt_id", "status", "lab": LabSummary, "elapsed_ms", "command_count",
+  "checkpoints": [{ "id", "title", "status", "first_passed_at" }],
+  "solution": "markdown 全文（依 lang）"
+}
+
+WS /ws/attempts/{id}/events   伺服器 → 客戶端，JSON text frame，連上先送一則 status
+  { "type": "status", "status", "error_message", "elapsed_ms", "server_time" }
+  { "type": "provisioning", "step": "networks|containers|bootstrap|setup" }
+  { "type": "checkpoint", "id", "status", "first_passed_at" }
+  { "type": "tick", "elapsed_ms", "server_time" }            每 10 秒，只在 running
+  { "type": "error", "message" }
+客戶端不需送任何訊息；連線存在即為 heartbeat。
+
+WS /ws/attempts/{id}/term/{node}/{tab}
+  binary frame：pty 位元組，雙向
+  text frame 客戶端 → 伺服器：{ "type": "resize", "cols", "rows" }
+  text frame 伺服器 → 客戶端：{ "type": "exit" }（shell 結束）、{ "type": "error", "message" }
+  tab 為客戶端自訂的短字串；同一 (node, tab) 只能有一條連線，新連線取代舊的。</code></pre>
+
 <h2><span class="n">11</span>Web UI</h2>
 <div class="tbl"><table>
 <tr><th>頁面</th><th>內容</th></tr>
