@@ -15,15 +15,15 @@ import (
 
 type harness struct {
 	*Checker
-	svc    *attempt.Service
-	store  *store.Store
-	runner *fakeRunner
-	lab    content.Lab
-	id     string
-	events <-chan attempt.Event
-	ticks  chan time.Time
-	swepts chan struct{}
-	loops  *atomic.Int64
+	svc     *attempt.Service
+	store   *store.Store
+	runner  *fakeRunner
+	lab     content.Lab
+	id      string
+	events  <-chan attempt.Event
+	ticks   chan time.Time
+	swepts  chan struct{}
+	tickers *atomic.Int64
 }
 
 func newHarness(t *testing.T) *harness {
@@ -57,11 +57,11 @@ func newHarness(t *testing.T) *harness {
 
 	ticks := make(chan time.Time)
 	swepts := make(chan struct{}, 8)
-	var loops atomic.Int64
+	var tickers atomic.Int64
 
 	chk := New(Deps{Store: st, Runner: fr, Attempts: svc, Timeout: time.Second, Logger: discardLogger()})
 	chk.ticker = func(time.Duration) (<-chan time.Time, func()) {
-		loops.Add(1)
+		tickers.Add(1)
 		return ticks, func() {}
 	}
 	chk.swept = func() {
@@ -84,7 +84,7 @@ func newHarness(t *testing.T) *harness {
 
 	h := &harness{
 		Checker: chk, svc: svc, store: st, runner: fr, lab: labs[0], id: view.Id,
-		events: events, ticks: ticks, swepts: swepts, loops: &loops,
+		events: events, ticks: ticks, swepts: swepts, tickers: &tickers,
 	}
 	h.waitForStatus(t, store.StatusRunning)
 	return h
@@ -161,6 +161,23 @@ func (h *harness) sweep(t *testing.T) {
 	case <-h.swepts:
 	case <-time.After(waitTimeout):
 		t.Fatal("timed out waiting for a sweep to finish")
+	}
+}
+
+func (h *harness) loopCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.loops)
+}
+
+func (h *harness) waitForLoopsToStop(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(waitTimeout)
+	for h.loopCount() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the sweep loop is still running")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -275,11 +292,7 @@ func TestAllPassFinishesTheAttempt(t *testing.T) {
 		t.Errorf("attempt status = %s, want passed", got)
 	}
 
-	select {
-	case h.ticks <- time.Now():
-		t.Fatal("the sweep loop is still running after the attempt passed")
-	case <-time.After(100 * time.Millisecond):
-	}
+	h.waitForLoopsToStop(t)
 	if want := 4; h.runner.execs() != want {
 		t.Errorf("exec count = %d, want %d", h.runner.execs(), want)
 	}
@@ -327,7 +340,7 @@ func TestStartLoopIsIdempotent(t *testing.T) {
 	h.startLoop(context.Background(), h.id)
 	h.sweep(t)
 
-	if got := h.loops.Load(); got != 1 {
+	if got := h.tickers.Load(); got != 1 {
 		t.Errorf("sweep loops started = %d, want 1", got)
 	}
 	if want := 4; h.runner.execs() != want {
