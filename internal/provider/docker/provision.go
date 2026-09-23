@@ -31,7 +31,24 @@ const (
 	k3sPollInterval     = time.Second
 	kubectlTimeout      = 15 * time.Second
 	stderrTailLines     = 20
+
+	// Link endpoints outrank the mgmt endpoint on a lexicographic tie, so without this
+	// the default gateway would move onto a link the moment one is no longer internal.
+	linkGwPriority = -1
 )
+
+// Link networks must carry traffic routed through a gateway node, so they cannot use
+// Internal: true (its DOCKER-INTERNAL rules drop every frame whose source or destination
+// sits outside the bridge's own subnet, and with br_netfilter those rules also see frames
+// bridged between two containers) nor the default gateway mode (its raw PREROUTING rules
+// drop packets addressed to a container that arrive on another bridge). Leaving the bridge
+// without an address takes the host's place on the link away instead, so a link subnet is
+// still reachable only over the link itself and link traffic is never NATed.
+var linkNetworkOptions = map[string]string{
+	"com.docker.network.bridge.inhibit_ipv4":         "true",
+	"com.docker.network.bridge.gateway_mode_ipv4":    "routed",
+	"com.docker.network.bridge.enable_ip_masquerade": "false",
+}
 
 func (p *Provider) Provision(ctx context.Context, spec runner.SandboxSpec) (runner.SandboxID, error) {
 	sb := runner.SandboxID(spec.AttemptID)
@@ -95,9 +112,9 @@ func (p *Provider) createNetworks(ctx context.Context, spec runner.SandboxSpec, 
 	for _, link := range spec.Links {
 		name := linkNetworkName(spec.AttemptID, link.Name)
 		opts := network.CreateOptions{
-			Internal: true,
-			IPAM:     &network.IPAM{Config: []network.IPAMConfig{{Subnet: link.Subnet}}},
-			Labels:   attemptLabels(spec.AttemptID),
+			Options: linkNetworkOptions,
+			IPAM:    &network.IPAM{Config: []network.IPAMConfig{{Subnet: link.Subnet}}},
+			Labels:  attemptLabels(spec.AttemptID),
 		}
 		if _, err := p.cli.NetworkCreate(ctx, name, opts); err != nil {
 			return fmt.Errorf("network %s: %w", name, err)
@@ -150,7 +167,10 @@ func (p *Provider) connectLinks(ctx context.Context, spec runner.SandboxSpec, lo
 		netName := linkNetworkName(spec.AttemptID, link.Name)
 		for _, endpoint := range link.Endpoints {
 			address, _, _ := strings.Cut(endpoint.Address, "/")
-			settings := &network.EndpointSettings{IPAMConfig: &network.EndpointIPAMConfig{IPv4Address: address}}
+			settings := &network.EndpointSettings{
+				IPAMConfig: &network.EndpointIPAMConfig{IPv4Address: address},
+				GwPriority: linkGwPriority,
+			}
 			if err := p.cli.NetworkConnect(ctx, netName, containerName(spec.AttemptID, endpoint.Node), settings); err != nil {
 				return fmt.Errorf("connect %s to %s: %w", endpoint.Node, netName, err)
 			}

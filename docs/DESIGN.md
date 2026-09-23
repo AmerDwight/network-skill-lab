@@ -227,7 +227,8 @@ links:
 ```
 
 v1 Docker provider 的實作（Phase 0 實證）：
-- 每條 link = 一個 `--internal` bridge network，以 `--ip` 指定位址；另有一個 mgmt network 給 eth0 走 NAT。
+- 每條 link = 一個 bridge network，以 `--ip` 指定位址；另有一個 mgmt network 給 eth0 走 NAT。
+- link network 不用 `--internal`（其 `DOCKER-INTERNAL` 規則會擋掉經由 gateway 節點轉送的封包），改用 `inhibit_ipv4=true` + `gateway_mode_ipv4=routed` + `enable_ip_masquerade=false`：bridge 不配位址，host 就沒有進入 link 網段的路由，link 流量不做 NAT 也沒有對外出口；端點再以較低的 `GwPriority` 確保 default route 仍留在 mgmt。
 - 建容器時只接 mgmt，啟動後依 topology 宣告順序逐一 `docker network connect`，eth1、eth2 的順序即宣告順序。
 - 節點只建立與銷毀，不 restart：restart 後 Docker 重接網路的順序不保證，且會蓋回 resolv.conf。若日後需要，改用 netplan `match: {macaddress}` + `set-name` 綁 MAC。
 - bootstrap 把 Docker 配的位址寫進 netplan 交給 networkd（方案 A），之後題目可自由 `netplan apply`、改 IP，Docker 不會干預。
