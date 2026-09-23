@@ -215,7 +215,7 @@ links:
     subnet: "{{subnet}}"
     addresses: { web01: "{{ip_a}}/24", db01: "{{ip_b}}/24" }</code></pre>
 <p><b>驗證規則</b>：id 與目錄名一致；modes 只能是 <code>guided</code>；params 只允許 <code>const</code>；<code>{{}}</code> 只能引用已定義的 param；checkpoint 的 node 必須存在於 topology；script 檔案必須存在且可執行；links 的 endpoints 介面不能是 eth0；每個 node 在同一 link 只能出現一次。違反任一條，<code>nsl serve</code> 拒絕啟動並列出所有錯誤。</p>
-<p><b>腳本契約</b>（同 DESIGN.md §3.5）：以 root 在指定 node 執行，param 以 <code>NSL_&lt;UPPER&gt;</code> 注入；setup 失敗 exit 非 0 則 attempt 進 <code>error</code>；checks 10 秒逾時視為失敗。</p>
+<p><b>腳本契約</b>（同 DESIGN.md §3.5）：以 root 執行，param 以 <code>NSL_&lt;UPPER&gt;</code> 注入；checks 在其宣告的 node 執行，10 秒逾時視為失敗。<b>setup.sh 在拓樸的每個 node 各執行一次</b>（依 topology 宣告順序），帶 <code>NSL_NODE</code>，腳本自行依 node 分支；任一 node exit 非 0 則 attempt 進 <code>error</code>。（2026-09-23 planner 澄清，T2 派工時採用。）</p>
 
 <h2><span class="n">06</span>Docker provider</h2>
 <p>實作 <code>runner.Runner</code>，全部行為由 Phase 0 實證（<code>docs/PHASE0-RESULTS.md</code>）。</p>
@@ -226,7 +226,7 @@ links:
 <li>啟動後依 topology 的 links 順序 <code>network connect --ip</code>，保證 eth1、eth2 順序。</li>
 <li>輪詢 <code>systemctl is-system-running</code> 到 running / degraded（上限 30 秒）。</li>
 <li>exec <code>nsl-bootstrap</code>，環境變數 <code>NSL_NODE</code>、<code>NSL_ROLE</code>、<code>NSL_IFACES</code>（k3s 再加 token / server）。各 node 平行。</li>
-<li>exec <code>setup.sh</code>（以 root，注入 params）。失敗則整個 sandbox 銷毀並回傳錯誤訊息（含 stderr 最後 20 行）。</li>
+<li>依 topology 順序在每個 node exec <code>setup.sh</code>（以 root，注入 params 與 <code>NSL_NODE</code>）。任一 node 失敗則整個 sandbox 銷毀並回傳錯誤訊息（含 node 名與 stderr 最後 20 行）。</li>
 </ol>
 <h4>OpenTerminal(sb, node)</h4>
 <p><code>docker exec -it -u nsl -w /home/nsl</code> 執行 <code>bash -l</code>，環境 <code>TERM=xterm-256color</code>。回傳可讀寫的 PTY 與 resize 方法。每個 tab 一個 exec，關 tab 就結束該 exec。</p>
