@@ -7,7 +7,22 @@ export interface Health {
   error: string;
 }
 
-export type LabMode = "guided";
+export type LabMode = "tutorial" | "guided" | "real";
+
+export const labModes: readonly LabMode[] = ["tutorial", "guided", "real"];
+
+export interface TopicNode {
+  id: string;
+  title: string;
+  labs: number;
+  docs: number;
+  children: TopicNode[];
+}
+
+export interface DocRef {
+  id: string;
+  title: string;
+}
 
 export interface LabSummary {
   id: string;
@@ -16,6 +31,8 @@ export interface LabSummary {
   level: number;
   modes: LabMode[];
   estimated_minutes: number;
+  related_docs: DocRef[];
+  has_hidden_checkpoints: boolean;
 }
 
 export interface LabNode {
@@ -28,9 +45,47 @@ export interface LabCheckpoint {
   title: string;
 }
 
-export interface Lab extends LabSummary {
+export interface LabDetail extends LabSummary {
   nodes: LabNode[];
   checkpoints: LabCheckpoint[];
+  topic_title: string;
+}
+
+export interface DocSummary {
+  id: string;
+  title: string;
+  topic: string;
+}
+
+export interface Doc extends DocSummary {
+  body: string;
+  completed: boolean;
+}
+
+export interface TrackSummary {
+  id: string;
+  title: string;
+  steps: number;
+  completed: number;
+}
+
+export interface TrackStep {
+  kind: "doc" | "lab";
+  ref: string;
+  title: string;
+  mode: LabMode | null;
+  completed: boolean;
+}
+
+export interface Track {
+  id: string;
+  title: string;
+  steps: TrackStep[];
+}
+
+export interface ProgressRequest {
+  kind: "doc";
+  ref: string;
 }
 
 export type AttemptStatus =

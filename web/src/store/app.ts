@@ -5,15 +5,30 @@ import {
   createAttempt,
   getCurrentAttempt,
   getHealth,
+  getLab,
   listLabs,
+  listTopics,
 } from "../api/client";
-import type { Attempt, Health, LabSummary } from "../api/types";
+import type {
+  Attempt,
+  Health,
+  LabDetail,
+  LabMode,
+  LabSummary,
+  TopicNode,
+} from "../api/types";
 import { changeLanguage, currentLanguage } from "../i18n";
 import type { Language } from "../i18n";
+import { messageOf } from "../lib/errors";
 
 export type HealthState =
   | { status: "loading" }
   | { status: "ok"; health: Health }
+  | { status: "error"; message: string };
+
+export type TopicsState =
+  | { status: "loading" }
+  | { status: "ok"; topics: TopicNode[] }
   | { status: "error"; message: string };
 
 export type LabsState =
@@ -21,32 +36,44 @@ export type LabsState =
   | { status: "ok"; labs: LabSummary[] }
   | { status: "error"; message: string };
 
+export type LabState =
+  | { status: "loading" }
+  | { status: "ok"; lab: LabDetail }
+  | { status: "error"; message: string };
+
+export interface StartRequest {
+  labId: string;
+  mode: LabMode;
+}
+
 export interface AppState {
   language: Language;
   health: HealthState;
+  topics: TopicsState;
   labs: LabsState;
+  lab: LabState;
   attempt: Attempt | null;
-  startingLabId: string | null;
+  starting: StartRequest | null;
   attemptError: string | null;
   setLanguage: (language: Language) => Promise<void>;
   loadHealth: () => Promise<void>;
-  loadLabs: () => Promise<void>;
+  loadTopics: () => Promise<void>;
+  loadLabs: (topic?: string) => Promise<void>;
+  loadLab: (id: string) => Promise<void>;
   loadCurrentAttempt: () => Promise<void>;
-  startAttempt: (labId: string) => Promise<Attempt | null>;
+  startAttempt: (labId: string, mode: LabMode) => Promise<Attempt | null>;
 }
 
 export const initialState = {
   language: currentLanguage(),
   health: { status: "loading" } as HealthState,
+  topics: { status: "loading" } as TopicsState,
   labs: { status: "loading" } as LabsState,
+  lab: { status: "loading" } as LabState,
   attempt: null,
-  startingLabId: null,
+  starting: null,
   attemptError: null,
 };
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 export const useAppStore = create<AppState>()((set, get) => ({
   ...initialState,
@@ -54,7 +81,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setLanguage: async (language) => {
     await changeLanguage(language);
     set({ language });
-    await get().loadLabs();
   },
 
   loadHealth: async () => {
@@ -66,12 +92,30 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
 
-  loadLabs: async () => {
+  loadTopics: async () => {
+    set({ topics: { status: "loading" } });
+    try {
+      set({ topics: { status: "ok", topics: await listTopics() } });
+    } catch (error) {
+      set({ topics: { status: "error", message: messageOf(error) } });
+    }
+  },
+
+  loadLabs: async (topic) => {
     set({ labs: { status: "loading" } });
     try {
-      set({ labs: { status: "ok", labs: await listLabs() } });
+      set({ labs: { status: "ok", labs: await listLabs(topic) } });
     } catch (error) {
       set({ labs: { status: "error", message: messageOf(error) } });
+    }
+  },
+
+  loadLab: async (id) => {
+    set({ lab: { status: "loading" } });
+    try {
+      set({ lab: { status: "ok", lab: await getLab(id) } });
+    } catch (error) {
+      set({ lab: { status: "error", message: messageOf(error) } });
     }
   },
 
@@ -83,15 +127,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
   },
 
-  startAttempt: async (labId) => {
-    set({ startingLabId: labId, attemptError: null });
+  startAttempt: async (labId, mode) => {
+    set({ starting: { labId, mode }, attemptError: null });
     try {
-      const attempt = await createAttempt(labId);
-      set({ attempt, startingLabId: null });
+      const attempt = await createAttempt(labId, mode);
+      set({ attempt, starting: null });
       return attempt;
     } catch (error) {
       const message = messageOf(error);
-      set({ startingLabId: null });
+      set({ starting: null });
       if (error instanceof ApiError && error.status === 409) {
         await get().loadCurrentAttempt();
       }

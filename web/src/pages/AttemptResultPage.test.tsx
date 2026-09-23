@@ -30,6 +30,8 @@ function makeResult(overrides: Partial<Result> = {}): Result {
       level: 2,
       modes: ["guided"],
       estimated_minutes: 10,
+      related_docs: [],
+      has_hidden_checkpoints: false,
     },
     elapsed_ms: 254000,
     command_count: 17,

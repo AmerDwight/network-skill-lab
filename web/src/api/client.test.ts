@@ -6,10 +6,16 @@ import {
   ApiError,
   createAttempt,
   getCurrentAttempt,
+  getDoc,
   getHealth,
   getLab,
   getResult,
+  getTrack,
+  listDocs,
   listLabs,
+  listTopics,
+  listTracks,
+  markDocRead,
 } from "./client";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -71,12 +77,123 @@ describe("listLabs", () => {
         level: 2,
         modes: ["guided"],
         estimated_minutes: 10,
+        related_docs: [{ id: "net/ip/guide", title: "IP 排查指南" }],
+        has_hidden_checkpoints: false,
       },
     ];
     fetchMock.mockResolvedValue(jsonResponse(200, labs));
 
     await expect(listLabs()).resolves.toEqual(labs);
     expect(lastUrl()).toBe("/api/labs?lang=zh-TW");
+  });
+
+  it("filters by topic", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+
+    await listLabs("net/ip");
+
+    expect(lastUrl()).toBe("/api/labs?topic=net%2Fip&lang=zh-TW");
+  });
+});
+
+describe("listTopics", () => {
+  it("returns the topic tree", async () => {
+    const topics = [
+      {
+        id: "net",
+        title: "網路",
+        labs: 2,
+        docs: 1,
+        children: [
+          { id: "net/ip", title: "IP", labs: 1, docs: 1, children: [] },
+        ],
+      },
+    ];
+    fetchMock.mockResolvedValue(jsonResponse(200, topics));
+
+    await expect(listTopics()).resolves.toEqual(topics);
+    expect(lastUrl()).toBe("/api/topics?lang=zh-TW");
+  });
+});
+
+describe("listDocs", () => {
+  it("returns the doc summaries", async () => {
+    const docs = [
+      { id: "net/ip/guide", title: "IP 排查指南", topic: "net/ip" },
+    ];
+    fetchMock.mockResolvedValue(jsonResponse(200, docs));
+
+    await expect(listDocs()).resolves.toEqual(docs);
+    expect(lastUrl()).toBe("/api/docs?lang=zh-TW");
+  });
+});
+
+describe("getDoc", () => {
+  it("keeps the slashes of the doc id in the path", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: "net/ip/guide" }));
+
+    await expect(getDoc("net/ip/guide")).resolves.toMatchObject({
+      id: "net/ip/guide",
+    });
+    expect(lastUrl()).toBe("/api/docs/net/ip/guide?lang=zh-TW");
+  });
+
+  it("escapes each segment", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    await getDoc("net/a b");
+
+    expect(lastUrl()).toBe("/api/docs/net/a%20b?lang=zh-TW");
+  });
+});
+
+describe("markDocRead", () => {
+  it("posts the progress entry and accepts a 204", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(markDocRead("net/ip/guide")).resolves.toBeUndefined();
+
+    const init = fetchMock.mock.calls.at(-1)?.[1];
+    expect(lastUrl()).toBe("/api/progress?lang=zh-TW");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(
+      JSON.stringify({ kind: "doc", ref: "net/ip/guide" }),
+    );
+  });
+
+  it("raises an ApiError on 400", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(400, {
+        error: { code: "invalid_kind", message: "lab" },
+      }),
+    );
+
+    await expect(markDocRead("net-ip-01")).rejects.toMatchObject({
+      status: 400,
+      code: "invalid_kind",
+    });
+  });
+});
+
+describe("listTracks", () => {
+  it("returns the track summaries", async () => {
+    const tracks = [
+      { id: "network-basics", title: "網路基礎", steps: 6, completed: 2 },
+    ];
+    fetchMock.mockResolvedValue(jsonResponse(200, tracks));
+
+    await expect(listTracks()).resolves.toEqual(tracks);
+    expect(lastUrl()).toBe("/api/tracks?lang=zh-TW");
+  });
+});
+
+describe("getTrack", () => {
+  it("encodes the track id", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: "a/b", steps: [] }));
+
+    await getTrack("a/b");
+
+    expect(lastUrl()).toBe("/api/tracks/a%2Fb?lang=zh-TW");
   });
 });
 

@@ -1,13 +1,20 @@
 import { currentLanguage } from "../i18n";
+import { encodePathSegments } from "../lib/paths";
 
 import type {
   Attempt,
   CreateAttemptRequest,
+  Doc,
+  DocSummary,
   Health,
-  Lab,
+  LabDetail,
   LabMode,
   LabSummary,
+  ProgressRequest,
   Result,
+  TopicNode,
+  Track,
+  TrackSummary,
 } from "./types";
 
 export class ApiError extends Error {
@@ -69,12 +76,43 @@ export async function getHealth(): Promise<Health> {
   return json<Health>(await send("/api/health"));
 }
 
-export async function listLabs(): Promise<LabSummary[]> {
-  return json<LabSummary[]>(await send("/api/labs"));
+export async function listTopics(): Promise<TopicNode[]> {
+  return json<TopicNode[]>(await send("/api/topics"));
 }
 
-export async function getLab(id: string): Promise<Lab> {
-  return json<Lab>(await send(`/api/labs/${encodeURIComponent(id)}`));
+export async function listLabs(topic?: string): Promise<LabSummary[]> {
+  const query =
+    topic === undefined ? "" : `?topic=${encodeURIComponent(topic)}`;
+  return json<LabSummary[]>(await send(`/api/labs${query}`));
+}
+
+export async function getLab(id: string): Promise<LabDetail> {
+  return json<LabDetail>(await send(`/api/labs/${encodeURIComponent(id)}`));
+}
+
+export async function listDocs(): Promise<DocSummary[]> {
+  return json<DocSummary[]>(await send("/api/docs"));
+}
+
+export async function getDoc(id: string): Promise<Doc> {
+  return json<Doc>(await send(`/api/docs/${encodePathSegments(id)}`));
+}
+
+export async function markDocRead(id: string): Promise<void> {
+  const body: ProgressRequest = { kind: "doc", ref: id };
+  await send("/api/progress", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listTracks(): Promise<TrackSummary[]> {
+  return json<TrackSummary[]>(await send("/api/tracks"));
+}
+
+export async function getTrack(id: string): Promise<Track> {
+  return json<Track>(await send(`/api/tracks/${encodeURIComponent(id)}`));
 }
 
 export async function createAttempt(
