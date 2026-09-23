@@ -25,6 +25,7 @@ const (
 	kubeconfigPath      = "/etc/rancher/k3s/k3s.yaml"
 	systemdTimeout      = 30 * time.Second
 	systemdPollInterval = 250 * time.Millisecond
+	udevTimeout         = 10 * time.Second
 	bootstrapTimeout    = 2 * time.Minute
 	setupTimeout        = 60 * time.Second
 	k3sReadyTimeout     = 90 * time.Second
@@ -188,8 +189,12 @@ func (p *Provider) waitSystemd(ctx context.Context, spec runner.SandboxSpec, log
 			result, err := p.exec(ctx, name, []string{"systemctl", "is-system-running"}, runner.ExecOptions{})
 			if err == nil {
 				switch strings.TrimSpace(string(result.Stdout)) {
-				case "running", "degraded":
+				case "running":
 					log.Debug("systemd ready", "node", node.Name)
+					return nil
+				case "degraded":
+					p.logFailedUnits(ctx, name, node.Name, log)
+					p.waitUdev(ctx, name, node.Name, log)
 					return nil
 				}
 			}
@@ -203,6 +208,51 @@ func (p *Provider) waitSystemd(ctx context.Context, spec runner.SandboxSpec, log
 			}
 		}
 	})
+}
+
+func (p *Provider) logFailedUnits(ctx context.Context, name, node string, log *slog.Logger) {
+	result, err := p.exec(ctx, name, []string{"systemctl", "--failed", "--no-legend", "--plain"}, runner.ExecOptions{})
+	if err != nil {
+		log.Warn("systemd degraded, listing failed units", "node", node, "error", err)
+		return
+	}
+	log.Warn("systemd degraded", "node", node, "failed", failedUnits(result.Stdout))
+}
+
+func failedUnits(stdout []byte) string {
+	var units []string
+	for line := range strings.SplitSeq(string(stdout), "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			units = append(units, strings.Join(fields, " "))
+		}
+	}
+	if len(units) == 0 {
+		return "none"
+	}
+	return strings.Join(units, "; ")
+}
+
+func (p *Provider) waitUdev(ctx context.Context, name, node string, log *slog.Logger) {
+	deadline := time.Now().Add(udevTimeout)
+	for {
+		result, err := p.exec(ctx, name, []string{"systemctl", "is-active", "systemd-udevd"}, runner.ExecOptions{})
+		if err == nil && isActive(result.Stdout) {
+			return
+		}
+		if time.Now().After(deadline) {
+			log.Warn("systemd-udevd not active, bootstrapping anyway", "node", node, "timeout", udevTimeout)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(systemdPollInterval):
+		}
+	}
+}
+
+func isActive(stdout []byte) bool {
+	return strings.TrimSpace(string(stdout)) == "active"
 }
 
 func (p *Provider) bootstrap(ctx context.Context, spec runner.SandboxSpec, log *slog.Logger) error {

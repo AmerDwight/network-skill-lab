@@ -29,6 +29,37 @@ write_resolved_conf() {
   systemctl restart systemd-resolved
 }
 
+wait_for_udev() {
+  # Under load udevd can lose its start race and stay failed; netplan apply needs it.
+  if ! systemctl is-active --quiet systemd-udevd.service; then
+    systemctl reset-failed systemd-udevd.service systemd-udevd-control.socket systemd-udevd-kernel.socket || true
+    systemctl start --no-block systemd-udevd-control.socket systemd-udevd-kernel.socket systemd-udevd.service || true
+  fi
+  local deadline=$((SECONDS + 15))
+  while ! udevadm control --ping >/dev/null 2>&1; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      printf 'nsl-bootstrap: udev control socket still unavailable after 15s, applying netplan anyway\n' >&2
+      return 0
+    fi
+    sleep 0.5
+  done
+}
+
+apply_netplan() {
+  local attempt err
+  for attempt in 1 2 3; do
+    wait_for_udev
+    if err="$(netplan apply 2>&1)"; then
+      return 0
+    fi
+    if [ "$attempt" -lt 3 ]; then
+      sleep 1
+    fi
+  done
+  printf '%s\nnsl-bootstrap: netplan apply failed after 3 attempts\n' "$err" >&2
+  return 1
+}
+
 write_netplan() {
   local renderer=networkd
   [ "$NSL_ROLE" = ubuntu-nm ] && renderer=NetworkManager
@@ -47,7 +78,7 @@ write_netplan() {
     systemctl disable --now systemd-networkd
     systemctl enable --now NetworkManager
   fi
-  netplan apply
+  apply_netplan
 }
 
 print_disable() {
