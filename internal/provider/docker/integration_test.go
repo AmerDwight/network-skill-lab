@@ -251,7 +251,7 @@ func TestGC(t *testing.T) {
 		t.Fatalf("create stray network: %v", err)
 	}
 	created, err := cli.ContainerCreate(t.Context(),
-		&container.Config{Image: testImage, Labels: nodeLabels(attempt, "stray")},
+		&container.Config{Image: testImage, Labels: nodeLabels(attempt, "stray", "ubuntu")},
 		&container.HostConfig{}, nil, nil, containerName(attempt, "stray"))
 	if err != nil {
 		t.Fatalf("create stray container: %v", err)

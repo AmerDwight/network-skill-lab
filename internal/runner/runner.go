@@ -22,8 +22,9 @@ var (
 )
 
 type NodeSpec struct {
-	Name string
-	Role string
+	Name       string
+	Role       string
+	K3sDisable []string
 }
 
 type EndpointSpec struct {

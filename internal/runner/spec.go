@@ -9,6 +9,20 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 )
 
+const RoleK3sServer = "k3s-server"
+
+var defaultK3sDisable = []string{"traefik", "metrics-server"}
+
+func k3sDisable(node content.Node) []string {
+	if node.Role != RoleK3sServer {
+		return nil
+	}
+	if node.K3s == nil {
+		return slices.Clone(defaultK3sDisable)
+	}
+	return slices.Clone(node.K3s.Disable)
+}
+
 func SpecFromLab(attemptID, image string, lab content.Lab, resolved content.Resolved, setup []byte) (SandboxSpec, error) {
 	topology, err := lab.Topology.Resolve(resolved.Params)
 	if err != nil {
@@ -17,7 +31,8 @@ func SpecFromLab(attemptID, image string, lab content.Lab, resolved content.Reso
 
 	nodes := make([]NodeSpec, 0, len(topology.Nodes))
 	for _, name := range slices.Sorted(maps.Keys(topology.Nodes)) {
-		nodes = append(nodes, NodeSpec{Name: name, Role: topology.Nodes[name].Role})
+		node := topology.Nodes[name]
+		nodes = append(nodes, NodeSpec{Name: name, Role: node.Role, K3sDisable: k3sDisable(node)})
 	}
 
 	links := make([]LinkSpec, 0, len(topology.Links))

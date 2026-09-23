@@ -17,13 +17,29 @@ import (
 
 func (p *Provider) Exec(ctx context.Context, sb runner.SandboxID, node string, cmd []string, opts runner.ExecOptions) (runner.ExecResult, error) {
 	name := containerName(string(sb), node)
-	if _, err := p.cli.ContainerInspect(ctx, name); err != nil {
+	inspected, err := p.cli.ContainerInspect(ctx, name)
+	if err != nil {
 		if cerrdefs.IsNotFound(err) {
 			return runner.ExecResult{}, p.missing(ctx, sb, node)
 		}
 		return runner.ExecResult{}, fmt.Errorf("inspect %s: %w", name, err)
 	}
+	if inspected.Config != nil {
+		opts.Env = execEnv(inspected.Config.Labels[labelRole], opts.Env)
+	}
 	return p.exec(ctx, name, cmd, opts)
+}
+
+func execEnv(role string, env map[string]string) map[string]string {
+	if role != runner.RoleK3sServer {
+		return env
+	}
+	out := maps.Clone(env)
+	if out == nil {
+		out = map[string]string{}
+	}
+	out["KUBECONFIG"] = kubeconfigPath
+	return out
 }
 
 func (p *Provider) missing(ctx context.Context, sb runner.SandboxID, node string) error {
