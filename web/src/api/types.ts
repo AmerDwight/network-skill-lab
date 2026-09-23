@@ -100,21 +100,42 @@ export interface AttemptCheckpoint {
   first_passed_at: string | null;
 }
 
+export interface TutorialStep {
+  checkpoint: string;
+  instruction: string;
+}
+
 export interface Attempt {
   id: string;
   lab_id: string;
-  mode: string;
+  mode: LabMode;
   status: AttemptStatus;
   error_message: string;
   lab: LabSummary;
   ticket: string;
   nodes: LabNode[];
   checkpoints: AttemptCheckpoint[];
+  checkpoints_hidden: boolean;
+  tutorial_steps: TutorialStep[] | null;
+  submit_count: number;
   elapsed_ms: number;
   started_at: string | null;
   ended_at: string | null;
   server_time: string;
   created_at: string;
+}
+
+export interface SubmitCheckpoint {
+  id: string;
+  title: string;
+  status: CheckpointStatus;
+}
+
+export interface SubmitResult {
+  passed: boolean;
+  checkpoints: SubmitCheckpoint[];
+  hidden_failed: number;
+  submit_count: number;
 }
 
 export interface Result {
@@ -128,13 +149,15 @@ export interface Result {
 }
 
 export type ProvisioningStep =
-  "networks" | "containers" | "bootstrap" | "setup";
+  "networks" | "containers" | "bootstrap" | "k3s" | "setup" | "precheck";
 
 export const provisioningSteps: readonly ProvisioningStep[] = [
   "networks",
   "containers",
   "bootstrap",
+  "k3s",
   "setup",
+  "precheck",
 ];
 
 export interface AttemptStatusEvent {
@@ -148,6 +171,7 @@ export interface AttemptStatusEvent {
 export interface AttemptProvisioningEvent {
   type: "provisioning";
   step: ProvisioningStep;
+  attempt?: number;
 }
 
 export interface AttemptCheckpointEvent {
@@ -163,6 +187,13 @@ export interface AttemptTickEvent {
   server_time: string;
 }
 
+export interface AttemptSubmitEvent {
+  type: "submit";
+  passed: boolean;
+  hidden_failed: number;
+  submit_count: number;
+}
+
 export interface AttemptErrorEvent {
   type: "error";
   message: string;
@@ -173,6 +204,7 @@ export type AttemptEvent =
   | AttemptProvisioningEvent
   | AttemptCheckpointEvent
   | AttemptTickEvent
+  | AttemptSubmitEvent
   | AttemptErrorEvent;
 
 export interface TerminalResizeMessage {

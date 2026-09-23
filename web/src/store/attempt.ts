@@ -1,12 +1,13 @@
 import { create } from "zustand";
 
-import { abandonAttempt, getAttempt } from "../api/client";
+import { abandonAttempt, getAttempt, submitAttempt } from "../api/client";
 import type {
   Attempt,
   AttemptCheckpoint,
   AttemptEvent,
   AttemptStatus,
   ProvisioningStep,
+  SubmitResult,
 } from "../api/types";
 import { messageOf } from "../lib/errors";
 import type { ConnectionState } from "../ws/socket";
@@ -32,12 +33,17 @@ export interface AttemptState {
   checkpointOrder: string[];
   checkpoints: Record<string, AttemptCheckpoint>;
   provisioningStep: ProvisioningStep | null;
+  precheckAttempt: number | null;
   eventsConnection: ConnectionState;
   terminals: Record<string, TerminalState>;
   loading: boolean;
   loadError: string | null;
   eventError: string | null;
   abandoning: boolean;
+  submitting: boolean;
+  submitCount: number;
+  submitResult: SubmitResult | null;
+  submitError: string | null;
   elapsedMs: number;
   syncedAt: number | null;
   displayedMs: number;
@@ -48,6 +54,8 @@ export interface AttemptState {
   setTerminalState: (key: string, state: TerminalState | null) => void;
   tick: () => void;
   abandon: (id: string) => Promise<boolean>;
+  submit: (id: string) => Promise<void>;
+  clearSubmitResult: () => void;
   reset: () => void;
 }
 
@@ -57,13 +65,18 @@ export const initialState = {
   errorMessage: "",
   checkpointOrder: [] as string[],
   checkpoints: {} as Record<string, AttemptCheckpoint>,
-  provisioningStep: null,
+  provisioningStep: null as ProvisioningStep | null,
+  precheckAttempt: null as number | null,
   eventsConnection: "closed" as ConnectionState,
   terminals: {} as Record<string, TerminalState>,
   loading: false,
   loadError: null,
   eventError: null,
   abandoning: false,
+  submitting: false,
+  submitCount: 0,
+  submitResult: null as SubmitResult | null,
+  submitError: null as string | null,
   elapsedMs: 0,
   syncedAt: null,
   displayedMs: 0,
@@ -88,6 +101,8 @@ function fromAttempt(attempt: Attempt) {
       attempt.checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]),
     ),
     provisioningStep: null as ProvisioningStep | null,
+    precheckAttempt: null as number | null,
+    submitCount: attempt.submit_count,
     elapsedMs: attempt.elapsed_ms,
     syncedAt,
     displayedMs: displayFor(attempt.status, attempt.elapsed_ms, syncedAt),
@@ -114,6 +129,7 @@ export const useAttemptStore = create<AttemptState>()((set, get) => ({
       set({
         ...fromAttempt(attempt),
         provisioningStep: get().provisioningStep,
+        precheckAttempt: get().precheckAttempt,
       });
     } catch (error) {
       set({ loadError: messageOf(error) });
@@ -137,10 +153,19 @@ export const useAttemptStore = create<AttemptState>()((set, get) => ({
         return;
       }
       case "provisioning": {
-        set({ provisioningStep: event.step });
+        set({
+          provisioningStep: event.step,
+          precheckAttempt:
+            event.step === "precheck"
+              ? (event.attempt ?? 1)
+              : state.precheckAttempt,
+        });
         return;
       }
       case "checkpoint": {
+        if (state.attempt?.mode === "real") {
+          return;
+        }
         const previous = state.checkpoints[event.id];
         const checkpoint: AttemptCheckpoint = {
           id: event.id,
@@ -164,6 +189,10 @@ export const useAttemptStore = create<AttemptState>()((set, get) => ({
           syncedAt,
           displayedMs: displayFor(state.status, event.elapsed_ms, syncedAt),
         });
+        return;
+      }
+      case "submit": {
+        set({ submitCount: event.submit_count });
         return;
       }
       case "error": {
@@ -203,6 +232,22 @@ export const useAttemptStore = create<AttemptState>()((set, get) => ({
       return false;
     }
   },
+
+  submit: async (id) => {
+    set({ submitting: true, submitError: null, submitResult: null });
+    try {
+      const result = await submitAttempt(id);
+      set({
+        submitting: false,
+        submitResult: result,
+        submitCount: result.submit_count,
+      });
+    } catch (error) {
+      set({ submitting: false, submitError: messageOf(error) });
+    }
+  },
+
+  clearSubmitResult: () => set({ submitResult: null }),
 
   reset: () => set(initialState),
 }));

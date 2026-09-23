@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { AttemptPanel } from "../components/AttemptPanel";
 import { ProvisioningPanel } from "../components/ProvisioningPanel";
 import { StatusBar } from "../components/StatusBar";
 import { TerminalWorkspace } from "../components/TerminalWorkspace";
-import { TicketPanel } from "../components/TicketPanel";
 import { isResultStatus, useAttemptStore } from "../store/attempt";
 import { useAttemptEvents } from "../ws/events";
 
@@ -20,9 +20,8 @@ export function AttemptPage() {
   const attempt = useAttemptStore((state) => state.attempt);
   const status = useAttemptStore((state) => state.status);
   const errorMessage = useAttemptStore((state) => state.errorMessage);
-  const checkpointOrder = useAttemptStore((state) => state.checkpointOrder);
-  const checkpoints = useAttemptStore((state) => state.checkpoints);
   const provisioningStep = useAttemptStore((state) => state.provisioningStep);
+  const precheckAttempt = useAttemptStore((state) => state.precheckAttempt);
   const eventsConnection = useAttemptStore((state) => state.eventsConnection);
   const terminals = useAttemptStore((state) => state.terminals);
   const loading = useAttemptStore((state) => state.loading);
@@ -61,12 +60,8 @@ export function AttemptPage() {
 
   return (
     <div className="attempt">
-      <TicketPanel
-        title={attempt?.lab.title ?? t("attempt.heading")}
-        ticket={attempt?.ticket ?? ""}
-        checkpoints={checkpointOrder
-          .map((checkpointId) => checkpoints[checkpointId])
-          .filter((checkpoint) => checkpoint !== undefined)}
+      <AttemptPanel
+        attemptId={attemptId}
         abandoning={abandoning}
         onAbandon={() => void handleAbandon()}
       />
@@ -89,7 +84,11 @@ export function AttemptPage() {
         {loading ? <p className="state">{t("attempt.loading")}</p> : null}
 
         {status === "provisioning" ? (
-          <ProvisioningPanel step={provisioningStep} />
+          <ProvisioningPanel
+            step={provisioningStep}
+            nodes={attempt?.nodes ?? []}
+            precheckAttempt={precheckAttempt}
+          />
         ) : null}
 
         {status === "error" ? (

@@ -12,6 +12,7 @@ import type {
   LabSummary,
   ProgressRequest,
   Result,
+  SubmitResult,
   TopicNode,
   Track,
   TrackSummary,
@@ -146,6 +147,16 @@ export async function abandonAttempt(id: string): Promise<Attempt> {
     { method: "POST" },
   );
   return json<Attempt>(response);
+}
+
+export async function submitAttempt(id: string): Promise<SubmitResult> {
+  const response = await send(
+    `/api/attempts/${encodeURIComponent(id)}/submit`,
+    {
+      method: "POST",
+    },
+  );
+  return json<SubmitResult>(response);
 }
 
 export async function getResult(id: string): Promise<Result> {

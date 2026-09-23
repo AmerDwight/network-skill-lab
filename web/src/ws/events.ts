@@ -29,6 +29,7 @@ export function parseAttemptEvent(data: unknown): AttemptEvent | null {
     type !== "provisioning" &&
     type !== "checkpoint" &&
     type !== "tick" &&
+    type !== "submit" &&
     type !== "error"
   ) {
     return null;
