@@ -79,6 +79,8 @@
   "result.checkpoint": "Checkpoint",
   "result.status": "Status",
   "result.passedAt": "Passed at",
+  "result.submissions": "Submissions",
+  "result.hidden": "Hidden",
   "result.solution": "Solution",
   "nav.label": "Sections",
   "nav.labs": "Labs",

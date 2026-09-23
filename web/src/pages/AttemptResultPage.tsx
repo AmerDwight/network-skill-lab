@@ -5,7 +5,7 @@ import Markdown from "react-markdown";
 import { Link, useParams } from "react-router";
 
 import { ApiError, getResult } from "../api/client";
-import type { Result } from "../api/types";
+import type { Result, ResultCheckpoint } from "../api/types";
 import { checkpointIcons, formatElapsed, formatTimeOfDay } from "../lib/format";
 
 type ResultState =
@@ -52,6 +52,13 @@ function Solution({
       </div>
     </details>
   );
+}
+
+function orderCheckpoints(checkpoints: ResultCheckpoint[]): ResultCheckpoint[] {
+  return [
+    ...checkpoints.filter((checkpoint) => checkpoint.visible),
+    ...checkpoints.filter((checkpoint) => !checkpoint.visible),
+  ];
 }
 
 function ResultNotice({ children }: { children: ReactNode }) {
@@ -160,6 +167,12 @@ function ResultView({
           <dt>{t("result.commands")}</dt>
           <dd className="result__number">{result.command_count}</dd>
         </div>
+        {result.submit_count > 0 && (
+          <div className="result__metric">
+            <dt>{t("result.submissions")}</dt>
+            <dd className="result__number">{result.submit_count}</dd>
+          </div>
+        )}
       </dl>
 
       <table className="result-table">
@@ -171,9 +184,18 @@ function ResultView({
           </tr>
         </thead>
         <tbody>
-          {result.checkpoints.map((checkpoint) => (
+          {orderCheckpoints(result.checkpoints).map((checkpoint) => (
             <tr key={checkpoint.id}>
-              <td>{checkpoint.title}</td>
+              <td>
+                <span className="result-table__checkpoint">
+                  {checkpoint.title}
+                  {!checkpoint.visible && (
+                    <span className="badge badge--hidden">
+                      {t("result.hidden")}
+                    </span>
+                  )}
+                </span>
+              </td>
               <td
                 className={`result-table__icon result-table__icon--${checkpoint.status}`}
               >

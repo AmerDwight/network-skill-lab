@@ -79,6 +79,8 @@
   "result.checkpoint": "檢查點",
   "result.status": "狀態",
   "result.passedAt": "通過時間",
+  "result.submissions": "提交次數",
+  "result.hidden": "隱藏",
   "result.solution": "解答",
   "nav.label": "區塊",
   "nav.labs": "練習題",
