@@ -20,4 +20,6 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
+require github.com/goccy/go-yaml v1.19.2
+
 ignore web/node_modules
