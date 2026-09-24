@@ -25,6 +25,7 @@ type Store struct {
 	path string
 
 	Users          *Users
+	Sessions       *Sessions
 	Attempts       *Attempts
 	CheckpointRuns *CheckpointRuns
 	CommandLog     *CommandLog
@@ -62,6 +63,7 @@ func Open(dataDir string) (*Store, error) {
 		db:             db,
 		path:           path,
 		Users:          &Users{db: db},
+		Sessions:       &Sessions{db: db},
 		Attempts:       &Attempts{db: db},
 		CheckpointRuns: &CheckpointRuns{db: db},
 		CommandLog:     &CommandLog{db: db},

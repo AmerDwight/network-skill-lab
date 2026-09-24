@@ -133,9 +133,14 @@ func (c *Cast) Close() error {
 		err = fmt.Errorf("close recording %s: %w", c.path, cerr)
 	}
 
+	var size int64
+	if info, serr := os.Stat(c.path); serr == nil {
+		size = info.Size()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 	defer cancel()
-	if serr := c.store.Recordings.SetEnded(ctx, c.id, time.Now()); serr != nil && err == nil {
+	if serr := c.store.Recordings.SetEnded(ctx, c.id, time.Now(), size); serr != nil && err == nil {
 		err = serr
 	}
 	return err

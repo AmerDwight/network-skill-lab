@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -193,4 +195,93 @@ func localUser(t *testing.T, st *Store) User {
 		t.Fatalf("Local() error = %v", err)
 	}
 	return user
+}
+
+func openAtVersion2(t *testing.T, dir string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, dbFileName))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	ctx := t.Context()
+	if _, err := db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create schema_migrations: %v", err)
+	}
+	for _, name := range []string{"0001_init.sql", "0002_progress.sql"} {
+		content, err := migrationsFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		version, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0])
+		if err != nil {
+			t.Fatalf("parse version of %s: %v", name, err)
+		}
+		if err := applyMigration(ctx, db, migration{version: version, name: name, sql: string(content)}); err != nil {
+			t.Fatalf("apply %s: %v", name, err)
+		}
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO attempts (id, user_id, lab_id, lab_version, mode, params_json, status, elapsed_ms, created_at)
+		VALUES ('att2', ?, 'net-ip-01-link-down', 1, 'guided', '{}', 'passed', 1200, ?)`,
+		localUserID, formatTime(time.Now())); err != nil {
+		t.Fatalf("insert attempt: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO recordings (id, attempt_id, node, tab_id, path, started_at)
+		VALUES ('rec2', 'att2', 'r1', 'tab1', '/tmp/r1.cast', ?)`,
+		formatTime(time.Now())); err != nil {
+		t.Fatalf("insert recording: %v", err)
+	}
+}
+
+func TestMigration0003UpgradesAVersion2Database(t *testing.T) {
+	dir := t.TempDir()
+	openAtVersion2(t, dir)
+
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := t.Context()
+	applied, err := appliedVersions(ctx, st.db)
+	if err != nil {
+		t.Fatalf("appliedVersions() error = %v", err)
+	}
+	if !applied[3] {
+		t.Fatalf("applied versions = %v, want 3", applied)
+	}
+
+	local, err := st.Users.Local(ctx)
+	if err != nil {
+		t.Fatalf("Local() error = %v", err)
+	}
+	if local.DisabledAt == nil {
+		t.Error("the local user was not disabled by migration 0003")
+	}
+
+	recordings, err := st.Recordings.ListByAttempt(ctx, "att2")
+	if err != nil {
+		t.Fatalf("ListByAttempt() error = %v", err)
+	}
+	if len(recordings) != 1 || recordings[0].Bytes != nil {
+		t.Errorf("recordings after 0003 = %+v", recordings)
+	}
+
+	session := Session{
+		ID:        "sess1",
+		UserID:    local.ID,
+		ExpiresAt: time.Now().Add(time.Hour),
+		UserAgent: "curl",
+	}
+	if err := st.Sessions.Create(ctx, session); err != nil {
+		t.Fatalf("Sessions.Create() error = %v", err)
+	}
+	if _, err := st.Sessions.Get(ctx, session.ID); err != nil {
+		t.Fatalf("Sessions.Get() error = %v", err)
+	}
 }

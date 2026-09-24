@@ -76,6 +76,46 @@ func (a *Attempts) ActiveForUser(ctx context.Context, userID string) (Attempt, b
 	return attempt, true, nil
 }
 
+func (a *Attempts) ListByUser(ctx context.Context, userID string, before time.Time, limit int) ([]Attempt, error) {
+	query := `SELECT ` + attemptColumns + ` FROM attempts WHERE user_id = ?`
+	args := []any{userID}
+	if !before.IsZero() {
+		query += ` AND created_at < ?`
+		args = append(args, formatTime(before))
+	}
+	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := a.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list attempts of user %s: %w", userID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var attempts []Attempt
+	for rows.Next() {
+		attempt, err := scanAttempt(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("list attempts of user %s: %w", userID, err)
+		}
+		attempts = append(attempts, attempt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list attempts of user %s: %w", userID, err)
+	}
+	return attempts, nil
+}
+
+func (a *Attempts) CountActive(ctx context.Context) (int, error) {
+	var count int
+	if err := a.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM attempts WHERE status IN (?, ?)`,
+		StatusProvisioning, StatusRunning).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count active attempts: %w", err)
+	}
+	return count, nil
+}
+
 func (a *Attempts) ListNonTerminal(ctx context.Context) ([]Attempt, error) {
 	rows, err := a.db.QueryContext(ctx,
 		`SELECT `+attemptColumns+` FROM attempts
