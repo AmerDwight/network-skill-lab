@@ -71,10 +71,10 @@ a{color:var(--accent)}
 <h1>Phase 3 帳號與歷史</h1>
 <div class="meta">
   <span>類型 <b>正式開發（三層模型）</b></span>
-  <span>版本 <b>v1 草案</b></span>
-  <span>日期 <b>2026-09-24</b></span>
+  <span>版本 <b>v1</b></span>
+  <span>日期 <b>2026-09-24，同日批准</b></span>
   <span>撰寫 <b>Fable 5.1（planner）</b></span>
-  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+  <span>狀態 <b><span class="tag risk">已批准</span></b></span>
 </div>
 <p class="lede">Phase 2 之後系統只有一個匿名使用者。Phase 3 讓多個人各自登入、各自練習、各自回看：本地帳密、admin 與 user 兩種角色、歷史紀錄頁、指令歷史與 pty 錄影回放。同時把 Phase 2 驗收留下的穩健性問題（啟動 GC、systemd 等待、k3s 路由）一次收掉，因為多人同時使用時這些會從偶發變常態。</p>
 
@@ -114,7 +114,7 @@ a{color:var(--accent)}
 </table></div>
 
 <h2><span class="n">03</span>待批的提案</h2>
-<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+<p>以下十項於 2026-09-24 隨 spec 一併採納。</p>
 
 <div class="decision"><b class="q">P1 密碼 argon2id，session 存 DB、HttpOnly + SameSite=Lax cookie、7 天滑動</b>
 參數 time=1、memory=64 MB、threads=4（<code>golang.org/x/crypto/argon2</code>）。session id 32 bytes 隨機，cookie 名 <code>nsl_session</code>；每次請求更新 <code>last_seen_at</code>，超過 7 天未用即失效；登出刪 row。無 remember-me、無 CSRF token（SameSite=Lax + 只用 JSON body 的 POST 已足夠，並拒絕非 JSON content-type 的寫入請求）。
@@ -254,11 +254,7 @@ POST /api/attempts                                       → 429 runner_busy { "
 </ul>
 
 <div class="approve">
-<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
-<ol>
-<li>P1 到 P10 有沒有要改的？特別是 P4 的上限預設 3 與 P6 的 admin 權限範圍。</li>
-<li>§02 的範圍：忘記密碼、自助註冊確定不做？</li>
-<li>批准後我開 issue，T1、T2 平行開工。</li>
-</ol>
+<h3 style="margin-top:0">批准紀錄</h3>
+<p>2026-09-24 使用者批准：P1 到 P10 全採納；忘記密碼與自助註冊不做。Task 以 GitHub issue 追蹤。</p>
 </div>
 </div>
