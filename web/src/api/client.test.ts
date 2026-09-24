@@ -9,14 +9,19 @@ import {
   getDoc,
   getHealth,
   getLab,
+  getMe,
   getResult,
   getTrack,
   listDocs,
   listLabs,
   listTopics,
   listTracks,
+  login,
   markDocRead,
+  runnerBusyOf,
+  updateUser,
 } from "./client";
+import { setUnauthorizedListener } from "./session";
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -39,6 +44,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  setUnauthorizedListener(null);
 });
 
 describe("getHealth", () => {
@@ -309,5 +315,73 @@ describe("error handling", () => {
       code: "unknown",
       message: "request failed with status 500",
     });
+  });
+
+  it("keeps the fields next to the error as details", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(429, {
+        error: { code: "runner_busy", message: "every sandbox is in use" },
+        sandboxes_active: 3,
+        sandboxes_max: 3,
+      }),
+    );
+
+    const error = await createAttempt("lab").catch((caught: unknown) => caught);
+
+    expect(runnerBusyOf(error)).toEqual({
+      sandboxes_active: 3,
+      sandboxes_max: 3,
+    });
+  });
+
+  it("reads no runner busy details off another error", async () => {
+    expect(runnerBusyOf(new ApiError(409, "attempt_in_progress", "x"))).toBe(
+      null,
+    );
+  });
+});
+
+describe("the unauthorized subscriber", () => {
+  const unauthorized = {
+    error: { code: "unauthorized", message: "sign in first" },
+  };
+
+  it("fires on a 401 from any endpoint but the login one", async () => {
+    const listener = vi.fn();
+    setUnauthorizedListener(listener);
+    fetchMock.mockResolvedValue(jsonResponse(401, unauthorized));
+
+    await expect(getMe()).rejects.toMatchObject({ status: 401 });
+
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("stays quiet when the login endpoint refuses the credentials", async () => {
+    const listener = vi.fn();
+    setUnauthorizedListener(listener);
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, {
+        error: { code: "invalid_credentials", message: "wrong password" },
+      }),
+    );
+
+    await expect(login("alice", "nope")).rejects.toMatchObject({
+      code: "invalid_credentials",
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin calls", () => {
+  it("patches a user by id", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: "u-alice" }));
+
+    await updateUser("u-alice", { disabled: true });
+
+    const init = fetchMock.mock.calls.at(-1)?.[1];
+    expect(lastUrl()).toBe("/api/admin/users/u-alice?lang=zh-TW");
+    expect(init?.method).toBe("PATCH");
+    expect(init?.body).toBe(JSON.stringify({ disabled: true }));
   });
 });

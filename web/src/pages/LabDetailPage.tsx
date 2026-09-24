@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { LabDetail, LabMode } from "../api/types";
 import { labModes } from "../api/types";
 import { Header } from "../components/Header";
+import { RunnerBusyNotice } from "../components/RunnerBusyNotice";
 import { docHref, topicHref } from "../lib/paths";
 import { useAppStore } from "../store/app";
 
@@ -151,6 +152,7 @@ export function LabDetailPage() {
   const language = useAppStore((state) => state.language);
   const lab = useAppStore((state) => state.lab);
   const attemptError = useAppStore((state) => state.attemptError);
+  const runnerBusy = useAppStore((state) => state.runnerBusy);
   const loadHealth = useAppStore((state) => state.loadHealth);
   const loadLab = useAppStore((state) => state.loadLab);
   const loadCurrentAttempt = useAppStore((state) => state.loadCurrentAttempt);
@@ -185,6 +187,8 @@ export function LabDetailPage() {
             </button>
           </div>
         ) : null}
+
+        {runnerBusy !== null ? <RunnerBusyNotice busy={runnerBusy} /> : null}
 
         {attemptError ? (
           <div className="banner banner--error">

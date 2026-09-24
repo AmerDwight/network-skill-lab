@@ -22,6 +22,7 @@ vi.mock("../api/client", async (importOriginal) => {
     getLab: vi.fn(),
     getCurrentAttempt: vi.fn(),
     createAttempt: vi.fn(),
+    runnerBusyOf: actual.runnerBusyOf,
   };
 });
 

@@ -5,6 +5,7 @@ import * as client from "./api/client";
 import { ApiError } from "./api/client";
 import { App } from "./App";
 import { initialState, useAppStore } from "./store/app";
+import { initialState as authInitialState, useAuthStore } from "./store/auth";
 
 vi.mock("./api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof client>();
@@ -16,9 +17,15 @@ vi.mock("./api/client", async (importOriginal) => {
     getLab: vi.fn(),
     getCurrentAttempt: vi.fn(),
     createAttempt: vi.fn(),
+    runnerBusyOf: actual.runnerBusyOf,
+    getMe: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+    updateMe: vi.fn(),
   };
 });
 
+const getMe = vi.mocked(client.getMe);
 const getHealth = vi.mocked(client.getHealth);
 const listTopics = vi.mocked(client.listTopics);
 const listLabs = vi.mocked(client.listLabs);
@@ -27,6 +34,14 @@ const getCurrentAttempt = vi.mocked(client.getCurrentAttempt);
 beforeEach(() => {
   vi.clearAllMocks();
   useAppStore.setState(initialState);
+  useAuthStore.setState(authInitialState);
+  getMe.mockResolvedValue({
+    id: "u-alice",
+    username: "alice",
+    role: "user",
+    locale: "zh",
+    created_at: "2026-09-12T09:30:00Z",
+  });
 });
 
 describe("App", () => {

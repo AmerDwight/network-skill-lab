@@ -4,14 +4,60 @@ import { WebSocketServer } from "ws";
 
 import {
   abandonPayload,
+  activeAttempts,
   attemptPayload,
+  attemptState,
   resultPayload,
   serveEvents,
   submit,
 } from "./attempts.mjs";
+import {
+  createUser,
+  forbidden,
+  listUsers,
+  login,
+  logout,
+  me,
+  patchMe,
+  patchUser,
+  sessionUser,
+  unauthorized,
+} from "./auth.mjs";
 import { docs, health, labs, topics, tracks } from "./fixtures.mjs";
 
 const port = 18090;
+
+const sandboxesMax = 3;
+
+const publicPaths = new Set(["/api/auth/login"]);
+
+function sandboxStats() {
+  return {
+    sandboxes_active: activeAttempts().length,
+    sandboxes_max: sandboxesMax,
+  };
+}
+
+function startAttempt(url, body, user) {
+  const stats = sandboxStats();
+  const busy =
+    url.searchParams.get("busy") === "1" ||
+    process.env.NSL_MOCK_BUSY === "1" ||
+    stats.sandboxes_active >= stats.sandboxes_max;
+  if (busy) {
+    return {
+      status: 429,
+      body: {
+        error: { code: "runner_busy", message: "every sandbox is in use" },
+        ...stats,
+      },
+    };
+  }
+  const id = `01JMOCKATTEMPT-${body?.mode ?? "guided"}`;
+  const state = attemptState(id);
+  state.owner = { id: user.id, username: user.username };
+  return { body: attemptPayload(id) };
+}
 
 const inTopic = (topic, selected) =>
   selected === null || topic === selected || topic.startsWith(`${selected}/`);
@@ -61,6 +107,39 @@ function found(value, id) {
 }
 
 const routes = [
+  ["POST", /^\/api\/auth\/login$/, (match, url, body) => login(body)],
+  [
+    "POST",
+    /^\/api\/auth\/logout$/,
+    (match, url, body, user, request) => logout(request),
+  ],
+  ["GET", /^\/api\/auth\/me$/, (match, url, body, user) => me(user)],
+  [
+    "PATCH",
+    /^\/api\/auth\/me$/,
+    (match, url, body, user) => patchMe(user, body),
+  ],
+  ["GET", /^\/api\/admin\/users$/, () => listUsers()],
+  ["POST", /^\/api\/admin\/users$/, (match, url, body) => createUser(body)],
+  [
+    "PATCH",
+    /^\/api\/admin\/users\/([^/]+)$/,
+    (match, url, body, user) =>
+      patchUser(user, decodeURIComponent(match[1]), body),
+  ],
+  ["GET", /^\/api\/admin\/attempts$/, () => ({ body: activeAttempts() })],
+  [
+    "POST",
+    /^\/api\/admin\/attempts\/([^/]+)\/abandon$/,
+    (match) => ({ body: abandonPayload(decodeURIComponent(match[1])) }),
+  ],
+  [
+    "GET",
+    /^\/api\/admin\/stats$/,
+    () => ({
+      body: { ...sandboxStats(), recordings_bytes: 734003200, attempts: 12 },
+    }),
+  ],
   ["GET", /^\/api\/health$/, () => ({ body: health })],
   ["GET", /^\/api\/topics$/, () => ({ body: topics })],
   [
@@ -133,9 +212,7 @@ const routes = [
   [
     "POST",
     /^\/api\/attempts$/,
-    (match, url, body) => ({
-      body: attemptPayload(`01JMOCKATTEMPT-${body?.mode ?? "guided"}`),
-    }),
+    (match, url, body, user) => startAttempt(url, body, user),
   ],
   [
     "GET",
@@ -170,30 +247,45 @@ async function readBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString());
 }
 
+function dispatch(request, url, body) {
+  const user = sessionUser(request);
+  if (user === null && !publicPaths.has(url.pathname)) {
+    return unauthorized();
+  }
+  if (url.pathname.startsWith("/api/admin/") && user.role !== "admin") {
+    return forbidden();
+  }
+  for (const [method, pattern, handler] of routes) {
+    const match = pattern.exec(url.pathname);
+    if (match === null || method !== request.method) {
+      continue;
+    }
+    return handler(match, url, body, user, request);
+  }
+  return {
+    status: 404,
+    body: { error: { code: "not_found", message: url.pathname } },
+  };
+}
+
+function reply(response, result) {
+  const headers = { ...(result.headers ?? {}) };
+  if (result.status === 204) {
+    response.writeHead(204, headers);
+    response.end();
+    return;
+  }
+  response.writeHead(result.status ?? 200, {
+    ...headers,
+    "Content-Type": "application/json",
+  });
+  response.end(JSON.stringify(result.body));
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url, "http://localhost");
   void readBody(request).then((body) => {
-    for (const [method, pattern, handler] of routes) {
-      const match = pattern.exec(url.pathname);
-      if (match === null || method !== request.method) {
-        continue;
-      }
-      const reply = handler(match, url, body);
-      if (reply.status === 204) {
-        response.writeHead(204);
-        response.end();
-        return;
-      }
-      response.writeHead(reply.status ?? 200, {
-        "Content-Type": "application/json",
-      });
-      response.end(JSON.stringify(reply.body));
-      return;
-    }
-    response.writeHead(404, { "Content-Type": "application/json" });
-    response.end(
-      JSON.stringify({ error: { code: "not_found", message: url.pathname } }),
-    );
+    reply(response, dispatch(request, url, body));
   });
 });
 
@@ -201,7 +293,27 @@ const sockets = new WebSocketServer({ noServer: true });
 
 const eventsPath = /^\/ws\/attempts\/([^/]+)\/events$/;
 
+function refuseUpgrade(socket) {
+  const payload = JSON.stringify({
+    error: { code: "unauthorized", message: "sign in first" },
+  });
+  socket.end(
+    [
+      "HTTP/1.1 401 Unauthorized",
+      "Content-Type: application/json",
+      `Content-Length: ${Buffer.byteLength(payload)}`,
+      "Connection: close",
+      "",
+      payload,
+    ].join("\r\n"),
+  );
+}
+
 server.on("upgrade", (request, socket, head) => {
+  if (sessionUser(request) === null) {
+    refuseUpgrade(socket);
+    return;
+  }
   const path = new URL(request.url, "http://localhost").pathname;
   const match = eventsPath.exec(path);
   sockets.handleUpgrade(request, socket, head, (connection) => {

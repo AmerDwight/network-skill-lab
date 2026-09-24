@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import type { AttemptEvent } from "../api/types";
 import { isFinishedStatus, useAttemptStore } from "../store/attempt";
+import { useAuthStore } from "../store/auth";
 
 import type { ConnectionState, SocketFactory } from "./socket";
 import { ReconnectingSocket, socketUrl } from "./socket";
@@ -41,6 +42,7 @@ export interface EventsConnectionOptions {
   onEvent: (event: AttemptEvent) => void;
   onStateChange: (state: ConnectionState) => void;
   onResync: () => void;
+  onFailedOpen?: () => void;
   shouldReconnect: () => boolean;
   createSocket?: SocketFactory;
 }
@@ -56,6 +58,7 @@ export class EventsConnection {
       onOpen: () => options.onResync(),
       onMessage: (data) => this.handleMessage(data),
       onStateChange: options.onStateChange,
+      onFailedOpen: options.onFailedOpen,
       shouldReconnect: options.shouldReconnect,
       createSocket: options.createSocket,
     });
@@ -88,6 +91,7 @@ export function useAttemptEvents(attemptId: string): void {
       onStateChange: (state) =>
         useAttemptStore.getState().setEventsConnection(state),
       onResync: () => void useAttemptStore.getState().refresh(attemptId),
+      onFailedOpen: () => void useAuthStore.getState().revalidate(),
       shouldReconnect: () =>
         !isFinishedStatus(useAttemptStore.getState().status),
     });

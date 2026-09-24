@@ -1,33 +1,63 @@
 import { currentLanguage } from "../i18n";
 import { encodePathSegments } from "../lib/paths";
 
+import { notifyUnauthorized } from "./session";
 import type {
+  AdminAttempt,
+  AdminStats,
+  AdminUser,
   Attempt,
   CreateAttemptRequest,
+  CreateUserRequest,
   Doc,
   DocSummary,
   Health,
   LabDetail,
   LabMode,
   LabSummary,
+  LoginRequest,
+  Me,
   ProgressRequest,
   Result,
+  RunnerBusy,
   SubmitResult,
   TopicNode,
   Track,
   TrackSummary,
+  UpdateMeRequest,
+  UpdateUserRequest,
 } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly details: Readonly<Record<string, unknown>>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details: Readonly<Record<string, unknown>> = {},
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
+}
+
+export const loginPath = "/api/auth/login";
+
+export function runnerBusyOf(error: unknown): RunnerBusy | null {
+  if (!(error instanceof ApiError) || error.code !== "runner_busy") {
+    return null;
+  }
+  const { sandboxes_active: active, sandboxes_max: max } = error.details;
+  if (typeof active !== "number" || typeof max !== "number") {
+    return null;
+  }
+  return { sandboxes_active: active, sandboxes_max: max };
 }
 
 function withLanguage(path: string): string {
@@ -44,7 +74,9 @@ function parseError(status: number, body: unknown): ApiError {
   if (typeof body !== "object" || body === null) {
     return fallback;
   }
-  const { error } = body as { error?: { code?: unknown; message?: unknown } };
+  const { error, ...details } = body as {
+    error?: { code?: unknown; message?: unknown };
+  };
   if (
     error === undefined ||
     typeof error.code !== "string" ||
@@ -52,7 +84,7 @@ function parseError(status: number, body: unknown): ApiError {
   ) {
     return fallback;
   }
-  return new ApiError(status, error.code, error.message);
+  return new ApiError(status, error.code, error.message, details);
 }
 
 async function send(path: string, init?: RequestInit): Promise<Response> {
@@ -66,7 +98,22 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
   } catch {
     body = null;
   }
-  throw parseError(response.status, body);
+  const error = parseError(response.status, body);
+  if (response.status === 401 && path !== loginPath) {
+    notifyUnauthorized();
+  }
+  throw error;
+}
+
+function jsonRequest(method: string, body?: unknown): RequestInit {
+  if (body === undefined) {
+    return { method };
+  }
+  return {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -162,4 +209,60 @@ export async function submitAttempt(id: string): Promise<SubmitResult> {
 export async function getResult(id: string): Promise<Result> {
   const response = await send(`/api/attempts/${encodeURIComponent(id)}/result`);
   return json<Result>(response);
+}
+
+export async function login(username: string, password: string): Promise<Me> {
+  const body: LoginRequest = { username, password };
+  return json<Me>(await send(loginPath, jsonRequest("POST", body)));
+}
+
+export async function logout(): Promise<void> {
+  await send("/api/auth/logout", jsonRequest("POST"));
+}
+
+export async function getMe(): Promise<Me> {
+  return json<Me>(await send("/api/auth/me"));
+}
+
+export async function updateMe(patch: UpdateMeRequest): Promise<Me> {
+  return json<Me>(await send("/api/auth/me", jsonRequest("PATCH", patch)));
+}
+
+export async function listUsers(): Promise<AdminUser[]> {
+  return json<AdminUser[]>(await send("/api/admin/users"));
+}
+
+export async function createUser(input: CreateUserRequest): Promise<AdminUser> {
+  return json<AdminUser>(
+    await send("/api/admin/users", jsonRequest("POST", input)),
+  );
+}
+
+export async function updateUser(
+  id: string,
+  patch: UpdateUserRequest,
+): Promise<AdminUser> {
+  return json<AdminUser>(
+    await send(
+      `/api/admin/users/${encodeURIComponent(id)}`,
+      jsonRequest("PATCH", patch),
+    ),
+  );
+}
+
+export async function listAdminAttempts(): Promise<AdminAttempt[]> {
+  return json<AdminAttempt[]>(await send("/api/admin/attempts"));
+}
+
+export async function adminAbandon(attemptId: string): Promise<Attempt> {
+  return json<Attempt>(
+    await send(
+      `/api/admin/attempts/${encodeURIComponent(attemptId)}/abandon`,
+      jsonRequest("POST"),
+    ),
+  );
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  return json<AdminStats>(await send("/api/admin/stats"));
 }

@@ -42,6 +42,7 @@ export interface ReconnectingSocketOptions {
   onOpen: () => void;
   onMessage: (data: unknown) => void;
   onStateChange: (state: ConnectionState) => void;
+  onFailedOpen?: () => void;
   shouldReconnect: () => boolean;
   createSocket?: SocketFactory;
 }
@@ -111,10 +112,14 @@ export class ReconnectingSocket {
   }
 
   private handleClose(): void {
+    const wasOpen = this.open;
     this.socket = null;
     this.open = false;
     if (this.stopped) {
       return;
+    }
+    if (!wasOpen) {
+      this.options.onFailedOpen?.();
     }
     if (!this.options.shouldReconnect()) {
       this.stop();

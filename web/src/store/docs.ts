@@ -22,6 +22,7 @@ export interface DocsStoreState {
   loadDocs: () => Promise<void>;
   loadDoc: (id: string) => Promise<void>;
   markRead: (id: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const initialState = {
@@ -68,4 +69,6 @@ export const useDocsStore = create<DocsStoreState>()((set, get) => ({
       set({ marking: false, markError: messageOf(error) });
     }
   },
+
+  reset: () => set(initialState),
 }));

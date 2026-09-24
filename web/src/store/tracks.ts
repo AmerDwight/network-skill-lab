@@ -19,6 +19,7 @@ export interface TracksStoreState {
   track: TrackState;
   loadTracks: () => Promise<void>;
   loadTrack: (id: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const initialState = {
@@ -46,4 +47,6 @@ export const useTracksStore = create<TracksStoreState>()((set) => ({
       set({ track: { status: "error", message: messageOf(error) } });
     }
   },
+
+  reset: () => set(initialState),
 }));
