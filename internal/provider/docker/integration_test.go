@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	testImage = "nsl/node"
-	fixtureID = "net-ip-01-link-down"
+	testImage   = "nsl/node"
+	fixtureID   = "net-ip-01-link-down"
+	fixtureSeed = 1
 )
 
 // testInstance keeps a test binary from collecting the sandboxes of a running
@@ -63,7 +64,7 @@ func attemptID(t *testing.T) string {
 	return "t4" + randomSuffix()
 }
 
-func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
+func fixtureSpec(t *testing.T, attempt string) (runner.SandboxSpec, map[string]string) {
 	t.Helper()
 	labs, err := content.Load(contenttest.Dir())
 	if err != nil {
@@ -75,7 +76,7 @@ func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
 	}
 	lab := labs[i]
 
-	resolved, err := lab.ResolveFor(1)
+	resolved, err := lab.ResolveFor(fixtureSeed)
 	if err != nil {
 		t.Fatalf("resolve params: %v", err)
 	}
@@ -87,7 +88,7 @@ func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
 	if err != nil {
 		t.Fatalf("SpecFromLab: %v", err)
 	}
-	return spec
+	return spec, resolved.Params
 }
 
 func mustExec(t *testing.T, p *Provider, sb runner.SandboxID, node string, cmd ...string) runner.ExecResult {
@@ -118,7 +119,8 @@ func waitForAddress(t *testing.T, p *Provider, sb runner.SandboxID, node, addres
 func TestSandboxLifecycle(t *testing.T) {
 	p, cli := newProvider(t)
 	attempt := attemptID(t)
-	spec := fixtureSpec(t, attempt)
+	spec, params := fixtureSpec(t, attempt)
+	addressA, addressB := params["ip_a"], params["ip_b"]
 	t.Cleanup(func() {
 		if err := p.Destroy(context.WithoutCancel(t.Context()), runner.SandboxID(attempt)); err != nil {
 			t.Errorf("cleanup: %v", err)
@@ -152,15 +154,15 @@ func TestSandboxLifecycle(t *testing.T) {
 	if out := string(mustExec(t, p, sb, "db01", "ip", "-br", "link", "show", "eth1").Stdout); !strings.Contains(out, "UP") {
 		t.Errorf("db01 eth1 = %q, want UP", out)
 	}
-	if out := string(mustExec(t, p, sb, "db01", "ip", "-4", "-br", "addr", "show", "eth1").Stdout); !strings.Contains(out, "10.0.5.20") {
-		t.Errorf("db01 eth1 address = %q, want 10.0.5.20", out)
+	if out := string(mustExec(t, p, sb, "db01", "ip", "-4", "-br", "addr", "show", "eth1").Stdout); !strings.Contains(out, addressB) {
+		t.Errorf("db01 eth1 address = %q, want %s", out, addressB)
 	}
-	if out := string(mustExec(t, p, sb, "web01", "cat", "/etc/netplan/50-nsl.yaml").Stdout); !strings.Contains(out, "10.0.5.10/24") {
-		t.Errorf("web01 netplan = %q, want 10.0.5.10/24 on eth1", out)
+	if out := string(mustExec(t, p, sb, "web01", "cat", "/etc/netplan/50-nsl.yaml").Stdout); !strings.Contains(out, addressA+"/24") {
+		t.Errorf("web01 netplan = %q, want %s/24 on eth1", out, addressA)
 	}
 	mustExec(t, p, sb, "web01", "ip", "link", "set", "eth1", "up")
-	if out := waitForAddress(t, p, sb, "web01", "10.0.5.10"); !strings.Contains(out, "10.0.5.10") {
-		t.Errorf("web01 eth1 address = %q, want 10.0.5.10 once the link is up again", out)
+	if out := waitForAddress(t, p, sb, "web01", addressA); !strings.Contains(out, addressA) {
+		t.Errorf("web01 eth1 address = %q, want %s once the link is up again", out, addressA)
 	}
 	if out := string(mustExec(t, p, sb, "web01", "readlink", "/etc/resolv.conf").Stdout); strings.TrimSpace(out) == "" {
 		t.Error("web01 /etc/resolv.conf is not a symlink")
@@ -396,7 +398,7 @@ func TestGCLeavesOtherInstancesAlone(t *testing.T) {
 func TestGCSurvivesANetworkThatStillHasEndpoints(t *testing.T) {
 	p, cli := newProvider(t)
 	attempt := attemptID(t)
-	spec := fixtureSpec(t, attempt)
+	spec, _ := fixtureSpec(t, attempt)
 	spec.Setup = runner.Script{}
 	t.Cleanup(func() {
 		if err := p.Destroy(context.WithoutCancel(t.Context()), runner.SandboxID(attempt)); err != nil {

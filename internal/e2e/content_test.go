@@ -13,12 +13,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/api"
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
+	"github.com/AmerDwight/network-skill-lab/internal/auth"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
@@ -70,6 +70,7 @@ type contentStack struct {
 	attempts *attempt.Service
 	provider *docker.Provider
 	store    *store.Store
+	client   *http.Client
 }
 
 func contentDockerClient(t *testing.T) client.APIClient {
@@ -127,39 +128,18 @@ func newContentStack(t *testing.T, cli client.APIClient) *contentStack {
 		Store:    st,
 		Runner:   provider,
 		Recorder: recordings,
+		Auth:     auth.New(st),
 		Logger:   logger,
 	}))
 	t.Cleanup(server.Close)
 
-	return &contentStack{server: server, attempts: attempts, provider: provider, store: st}
+	_, client := newLoggedInUser(t, server, st, "content")
+	return &contentStack{server: server, attempts: attempts, provider: provider, store: st, client: client}
 }
 
 func (s *contentStack) request(t *testing.T, method, path, body string) map[string]any {
 	t.Helper()
-	var reader io.Reader
-	if body != "" {
-		reader = strings.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), method, s.server.URL+path, reader)
-	if err != nil {
-		t.Fatalf("build request %s %s: %v", method, path, err)
-	}
-	resp, err := s.server.Client().Do(req)
-	if err != nil {
-		t.Fatalf("send request %s %s: %v", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body of %s %s: %v", method, path, err)
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("decode body %q: %v", raw, err)
-	}
-	decoded["_status"] = float64(resp.StatusCode)
-	return decoded
+	return jsonRequest(t, s.client, method, s.server.URL+path, body)
 }
 
 func (s *contentStack) start(t *testing.T, labID, mode string) string {

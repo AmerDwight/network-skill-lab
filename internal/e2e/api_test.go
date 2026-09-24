@@ -6,11 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -124,29 +122,10 @@ func newStackWith(t *testing.T, cli client.APIClient, maxSandboxes int) *stack {
 	return s
 }
 
-const e2ePassword = "correct horse"
-
 func (s *stack) newUser(t *testing.T, username string) *http.Client {
 	t.Helper()
-	hash, err := auth.HashPassword(e2ePassword)
-	if err != nil {
-		t.Fatalf("hash password: %v", err)
-	}
-	user := store.User{ID: store.NewID(), Username: username, PasswordHash: hash, Role: store.RoleUser}
-	if err := s.store.Users.Create(t.Context(), user); err != nil {
-		t.Fatalf("create user %s: %v", username, err)
-	}
+	user, client := newLoggedInUser(t, s.server, s.store, username)
 	s.users[username] = user
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("cookie jar: %v", err)
-	}
-	client := &http.Client{Jar: jar, Transport: s.server.Client().Transport}
-	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, e2ePassword)
-	if got := s.requestAs(t, client, http.MethodPost, "/api/auth/login", body); got["_status"] != float64(http.StatusOK) {
-		t.Fatalf("login as %s: %v", username, got)
-	}
 	return client
 }
 
@@ -157,33 +136,7 @@ func (s *stack) request(t *testing.T, method, path, body string) map[string]any 
 
 func (s *stack) requestAs(t *testing.T, client *http.Client, method, path, body string) map[string]any {
 	t.Helper()
-	var reader io.Reader
-	if body != "" {
-		reader = strings.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), method, s.server.URL+path, reader)
-	if err != nil {
-		t.Fatalf("build request %s %s: %v", method, path, err)
-	}
-	if body != "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("send request %s %s: %v", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body of %s %s: %v", method, path, err)
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("decode body %q: %v", raw, err)
-	}
-	decoded["_status"] = float64(resp.StatusCode)
-	return decoded
+	return jsonRequest(t, client, method, s.server.URL+path, body)
 }
 
 func (s *stack) requestArray(t *testing.T, method, path string) []any {
