@@ -4,7 +4,10 @@ import i18next from "../i18n";
 
 import {
   ApiError,
+  adminDeleteAttempt,
+  castUrl,
   createAttempt,
+  getCommands,
   getCurrentAttempt,
   getDoc,
   getHealth,
@@ -13,7 +16,9 @@ import {
   getResult,
   getTrack,
   listDocs,
+  listHistory,
   listLabs,
+  listRecordings,
   listTopics,
   listTracks,
   login,
@@ -384,5 +389,62 @@ describe("admin calls", () => {
     expect(lastUrl()).toBe("/api/admin/users/u-alice?lang=zh-TW");
     expect(init?.method).toBe("PATCH");
     expect(init?.body).toBe(JSON.stringify({ disabled: true }));
+  });
+
+  it("deletes an attempt by id", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await adminDeleteAttempt("01JHIST0");
+
+    expect(lastUrl()).toBe("/api/admin/attempts/01JHIST0?lang=zh-TW");
+    expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe("DELETE");
+  });
+});
+
+describe("history calls", () => {
+  it("asks for the caller's own first page", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+
+    await listHistory({ limit: 20 });
+
+    expect(lastUrl()).toBe("/api/history?limit=20&lang=zh-TW");
+  });
+
+  it("carries the user filter and the cursor", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+
+    await listHistory({
+      limit: 20,
+      user_id: "u-alice",
+      before: "2026-09-24T09:00:00Z",
+    });
+
+    expect(lastUrl()).toBe(
+      "/api/history?limit=20&user_id=u-alice&before=2026-09-24T09%3A00%3A00Z&lang=zh-TW",
+    );
+  });
+
+  it("pages the commands with an after cursor", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+
+    await getCommands("01JHIST0", { limit: 100, after: "cmd-9" });
+
+    expect(lastUrl()).toBe(
+      "/api/attempts/01JHIST0/commands?limit=100&after=cmd-9&lang=zh-TW",
+    );
+  });
+
+  it("lists the recordings of an attempt", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+
+    await listRecordings("01JHIST0");
+
+    expect(lastUrl()).toBe("/api/attempts/01JHIST0/recordings?lang=zh-TW");
+  });
+
+  it("builds a same-origin cast url for the player", () => {
+    expect(castUrl("01JHIST0", "rec-host-1")).toBe(
+      "/api/attempts/01JHIST0/recordings/rec-host-1/cast",
+    );
   });
 });

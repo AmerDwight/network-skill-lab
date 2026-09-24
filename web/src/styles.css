@@ -1215,3 +1215,110 @@ code {
   gap: var(--space-3);
   max-width: 520px;
 }
+
+.field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.history-table,
+.commands-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td,
+.commands-table th,
+.commands-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.history-table th,
+.commands-table th {
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.history-table__link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.history-table__link:hover {
+  text-decoration: underline;
+}
+
+.history-detail__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.history-detail__panel {
+  padding-top: var(--space-4);
+}
+
+.history-detail__panel .result,
+.history-detail__panel .main--placeholder {
+  margin: 0;
+  padding: 0;
+}
+
+.commands-table__time {
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.commands-table__exit {
+  text-align: right;
+}
+
+.commands-table__exit--failed {
+  color: var(--color-error);
+}
+
+.recordings {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.recording {
+  margin: 0;
+}
+
+.recording__caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.recording__name {
+  font-family: var(--font-mono);
+}
+
+.recording__meta {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.recording__speed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.cast-player {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}

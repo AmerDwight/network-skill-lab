@@ -308,3 +308,46 @@ export interface UpdateUserRequest {
   disabled?: boolean;
   password?: string;
 }
+
+export interface HistoryItem {
+  id: string;
+  lab: LabSummary;
+  mode: LabMode;
+  status: AttemptStatus;
+  elapsed_ms: number;
+  submit_count: number;
+  command_count: number;
+  created_at: string;
+  ended_at: string | null;
+  user: AttemptUser;
+}
+
+export type HistoryQuery = {
+  user_id?: string;
+  limit?: number;
+  before?: string;
+};
+
+export interface CommandEntry {
+  id: string;
+  node: string;
+  ts: string;
+  user: string;
+  cwd: string;
+  command: string;
+  exit_code: number;
+}
+
+export type CommandsQuery = {
+  limit?: number;
+  after?: string;
+};
+
+export interface RecordingInfo {
+  id: string;
+  node: string;
+  tab: string;
+  started_at: string;
+  ended_at: string | null;
+  bytes: number;
+}

@@ -6,6 +6,8 @@ import { AttemptPage } from "./pages/AttemptPage";
 import { AttemptResultPage } from "./pages/AttemptResultPage";
 import { DocListPage } from "./pages/DocListPage";
 import { DocPage } from "./pages/DocPage";
+import { HistoryDetailPage } from "./pages/HistoryDetailPage";
+import { HistoryPage } from "./pages/HistoryPage";
 import { LabDetailPage } from "./pages/LabDetailPage";
 import { LabListPage } from "./pages/LabListPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -24,6 +26,8 @@ export function App() {
           <Route path="/docs/*" element={<DocPage />} />
           <Route path="/tracks" element={<TrackListPage />} />
           <Route path="/tracks/:id" element={<TrackPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/history/:id" element={<HistoryDetailPage />} />
           <Route path="/attempts/:id" element={<AttemptPage />} />
           <Route path="/attempts/:id/result" element={<AttemptResultPage />} />
           <Route path="/admin" element={<AdminPage />} />

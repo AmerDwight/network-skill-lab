@@ -1,3 +1,5 @@
+export const summary = ({ nodes, checkpoints, topic_title, ...rest }) => rest;
+
 export const health = {
   ok: true,
   docker: true,
