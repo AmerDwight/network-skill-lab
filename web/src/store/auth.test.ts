@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as client from "../api/client";
 import { ApiError } from "../api/client";
 import { notifyUnauthorized } from "../api/session";
-import type { Me } from "../api/types";
+import type { AdminUser, Attempt, LabSummary, Me } from "../api/types";
 import i18next from "../i18n";
 
+import { initialState as adminInitialState, useAdminStore } from "./admin";
 import { initialState as appInitialState, useAppStore } from "./app";
 import { initialState, useAuthStore } from "./auth";
 
@@ -33,10 +34,48 @@ const me: Me = {
   created_at: "2026-09-12T09:30:00Z",
 };
 
+const lab: LabSummary = {
+  id: "net-ip-01-link-down",
+  title: "Server lost connectivity",
+  topic: "net/ip",
+  level: 2,
+  modes: ["tutorial", "guided", "real"],
+  estimated_minutes: 10,
+  related_docs: [],
+  has_hidden_checkpoints: false,
+};
+
+const attempt: Attempt = {
+  id: "01JATTEMPT",
+  lab_id: lab.id,
+  mode: "guided",
+  status: "running",
+  error_message: "",
+  lab,
+  ticket: "the server cannot reach the gateway",
+  nodes: [{ name: "host", role: "linux" }],
+  checkpoints: [],
+  checkpoints_hidden: false,
+  tutorial_steps: null,
+  submit_count: 0,
+  elapsed_ms: 0,
+  started_at: null,
+  ended_at: null,
+  server_time: "2026-09-23T00:00:00Z",
+  created_at: "2026-09-23T00:00:00Z",
+};
+
+const adminUser: AdminUser = {
+  ...me,
+  disabled_at: null,
+  attempts: 3,
+};
+
 beforeEach(async () => {
   vi.clearAllMocks();
   useAuthStore.setState(initialState);
   useAppStore.setState(appInitialState);
+  useAdminStore.setState(adminInitialState);
   await i18next.changeLanguage("zh-TW");
 });
 
@@ -161,5 +200,41 @@ describe("the unauthorized subscriber", () => {
 
     expect(useAuthStore.getState().me).toBeNull();
     expect(useAuthStore.getState().status).toBe("anonymous");
+  });
+});
+
+describe("user-scoped caches", () => {
+  function fillCaches() {
+    useAuthStore.setState({ me, status: "authenticated" });
+    useAppStore.setState({ attempt, language: "en" });
+    useAdminStore.setState({ users: { status: "ok", users: [adminUser] } });
+  }
+
+  it("drops them on logout", async () => {
+    fillCaches();
+    logout.mockResolvedValue(undefined);
+
+    await useAuthStore.getState().logout();
+
+    expect(useAppStore.getState().attempt).toBeNull();
+    expect(useAdminStore.getState().users).toEqual({ status: "loading" });
+  });
+
+  it("drops them when the api reports a 401", () => {
+    fillCaches();
+
+    notifyUnauthorized();
+
+    expect(useAppStore.getState().attempt).toBeNull();
+    expect(useAdminStore.getState().users).toEqual({ status: "loading" });
+  });
+
+  it("keeps the ui language", async () => {
+    fillCaches();
+    logout.mockResolvedValue(undefined);
+
+    await useAuthStore.getState().logout();
+
+    expect(useAppStore.getState().language).toBe("en");
   });
 });

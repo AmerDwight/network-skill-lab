@@ -51,6 +51,7 @@ export interface AdminState {
   createUser: (input: CreateUserRequest) => Promise<boolean>;
   updateUser: (id: string, patch: UpdateUserRequest) => Promise<boolean>;
   abandonAttempt: (id: string) => Promise<boolean>;
+  reset: () => void;
 }
 
 export const initialState = {
@@ -155,4 +156,6 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
       return false;
     }
   },
+
+  reset: () => set(initialState),
 }));

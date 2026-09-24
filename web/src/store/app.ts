@@ -65,6 +65,7 @@ export interface AppState {
   loadLab: (id: string) => Promise<void>;
   loadCurrentAttempt: () => Promise<void>;
   startAttempt: (labId: string, mode: LabMode) => Promise<Attempt | null>;
+  reset: () => void;
 }
 
 export const initialState = {
@@ -152,4 +153,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
       return null;
     }
   },
+
+  reset: () => set({ ...initialState, language: get().language }),
 }));

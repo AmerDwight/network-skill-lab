@@ -12,6 +12,7 @@ import type { Me, UserLocale } from "../api/types";
 import type { Language } from "../i18n";
 
 import { useAppStore } from "./app";
+import { resetUserScopedStores } from "./reset";
 
 export type AuthStatus = "unknown" | "anonymous" | "authenticated";
 
@@ -117,6 +118,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   clearSession: () => {
     set({ me: null, status: "anonymous", loginError: null });
+    resetUserScopedStores();
   },
 }));
 
