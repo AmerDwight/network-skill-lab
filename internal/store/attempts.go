@@ -116,6 +116,25 @@ func (a *Attempts) CountActive(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+func (a *Attempts) Count(ctx context.Context) (int, error) {
+	var count int
+	if err := a.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM attempts`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count attempts: %w", err)
+	}
+	return count, nil
+}
+
+func (a *Attempts) Delete(ctx context.Context, id string) error {
+	res, err := a.db.ExecContext(ctx, `DELETE FROM attempts WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete attempt %s: %w", id, err)
+	}
+	if err := requireRow(res); err != nil {
+		return fmt.Errorf("delete attempt %s: %w", id, err)
+	}
+	return nil
+}
+
 func (a *Attempts) ListNonTerminal(ctx context.Context) ([]Attempt, error) {
 	rows, err := a.db.QueryContext(ctx,
 		`SELECT `+attemptColumns+` FROM attempts

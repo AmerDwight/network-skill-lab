@@ -175,7 +175,7 @@ func (s *contentStack) cleanup(t *testing.T, id string) {
 	t.Helper()
 	t.Cleanup(func() {
 		ctx := context.WithoutCancel(t.Context())
-		if _, err := s.attempts.Abandon(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
+		if _, err := s.attempts.AbandonAsAdmin(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
 			t.Errorf("cleanup abandon: %v", err)
 		}
 		if err := s.provider.Destroy(ctx, runner.SandboxID(id)); err != nil {
@@ -403,7 +403,7 @@ func TestContentRouteLabHidesTheForwardingCheckpointInRealMode(t *testing.T) {
 		drawn = s.caseOf(t, id)
 		t.Logf("draw %d: attempt %s drew case %q", draw, id, drawn)
 		if drawn != forwardingOff {
-			if _, err := s.attempts.Abandon(context.WithoutCancel(t.Context()), id); err != nil {
+			if _, err := s.attempts.AbandonAsAdmin(context.WithoutCancel(t.Context()), id); err != nil {
 				t.Fatalf("abandon draw %d: %v", draw, err)
 			}
 		}

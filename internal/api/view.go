@@ -9,6 +9,7 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
+	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
 const timeLayout = "2006-01-02T15:04:05.000Z07:00"
@@ -156,6 +157,103 @@ type resultJSON struct {
 	SubmitCount  int                    `json:"submit_count"`
 	Checkpoints  []resultCheckpointJSON `json:"checkpoints"`
 	Solution     string                 `json:"solution"`
+}
+
+type meJSON struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	Role      string `json:"role"`
+	Locale    string `json:"locale"`
+	CreatedAt string `json:"created_at"`
+}
+
+type userJSON struct {
+	meJSON
+	DisabledAt *string `json:"disabled_at"`
+	Attempts   int     `json:"attempts"`
+}
+
+type statsJSON struct {
+	SandboxesActive int   `json:"sandboxes_active"`
+	SandboxesMax    int   `json:"sandboxes_max"`
+	RecordingsBytes int64 `json:"recordings_bytes"`
+	Attempts        int   `json:"attempts"`
+}
+
+type attemptUserJSON struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
+type adminAttemptJSON struct {
+	ID        string          `json:"id"`
+	Lab       labSummary      `json:"lab"`
+	Mode      string          `json:"mode"`
+	Status    string          `json:"status"`
+	ElapsedMS int64           `json:"elapsed_ms"`
+	CreatedAt string          `json:"created_at"`
+	User      attemptUserJSON `json:"user"`
+}
+
+type historyJSON struct {
+	ID           string          `json:"id"`
+	Lab          labSummary      `json:"lab"`
+	Mode         string          `json:"mode"`
+	Status       string          `json:"status"`
+	ElapsedMS    int64           `json:"elapsed_ms"`
+	SubmitCount  int             `json:"submit_count"`
+	CommandCount int             `json:"command_count"`
+	CreatedAt    string          `json:"created_at"`
+	EndedAt      *string         `json:"ended_at"`
+	User         attemptUserJSON `json:"user"`
+}
+
+type commandJSON struct {
+	ID       string `json:"id"`
+	Node     string `json:"node"`
+	TS       string `json:"ts"`
+	User     string `json:"user"`
+	CWD      string `json:"cwd"`
+	Command  string `json:"command"`
+	ExitCode int    `json:"exit_code"`
+}
+
+type recordingJSON struct {
+	ID        string  `json:"id"`
+	Node      string  `json:"node"`
+	Tab       string  `json:"tab"`
+	StartedAt string  `json:"started_at"`
+	EndedAt   *string `json:"ended_at"`
+	Bytes     int64   `json:"bytes"`
+}
+
+type errorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type runnerBusyJSON struct {
+	Error           errorBody `json:"error"`
+	SandboxesActive int       `json:"sandboxes_active"`
+	SandboxesMax    int       `json:"sandboxes_max"`
+}
+
+func meOf(user store.User) meJSON {
+	return meJSON{
+		ID:        user.ID,
+		Username:  user.Username,
+		Role:      user.Role,
+		Locale:    user.Locale,
+		CreatedAt: formatTime(user.CreatedAt),
+	}
+}
+
+func userOfSummary(summary store.UserSummary) userJSON {
+	return userJSON{
+		meJSON:     meOf(summary.User),
+		DisabledAt: formatTimePtr(summary.DisabledAt),
+		Attempts:   summary.Attempts,
+	}
 }
 
 func healthOf(h runner.Health) healthJSON {

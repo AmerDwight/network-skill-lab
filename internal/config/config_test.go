@@ -10,7 +10,8 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{
 		"NSL_LISTEN", "NSL_DATA_DIR", "NSL_CONTENT_DIR", "NSL_NODE_IMAGE",
-		"NSL_INSTANCE", "NSL_IDLE_TIMEOUT", "NSL_CHECK_INTERVAL", "NSL_SYSTEMD_TIMEOUT", "NSL_LOG_LEVEL",
+		"NSL_INSTANCE", "NSL_IDLE_TIMEOUT", "NSL_CHECK_INTERVAL", "NSL_SYSTEMD_TIMEOUT",
+		"NSL_MAX_SANDBOXES", "NSL_LOG_LEVEL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -29,6 +30,7 @@ func TestLoadDefaults(t *testing.T) {
 		IdleTimeout:    15 * time.Minute,
 		CheckInterval:  5 * time.Second,
 		SystemdTimeout: 60 * time.Second,
+		MaxSandboxes:   3,
 		LogLevel:       slog.LevelInfo,
 	}
 	if got != want {
@@ -45,6 +47,7 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("NSL_IDLE_TIMEOUT", "30m")
 	t.Setenv("NSL_CHECK_INTERVAL", "2s")
 	t.Setenv("NSL_SYSTEMD_TIMEOUT", "90s")
+	t.Setenv("NSL_MAX_SANDBOXES", "5")
 	t.Setenv("NSL_LOG_LEVEL", "debug")
 
 	got, err := Load()
@@ -61,6 +64,7 @@ func TestLoadFromEnv(t *testing.T) {
 		IdleTimeout:    30 * time.Minute,
 		CheckInterval:  2 * time.Second,
 		SystemdTimeout: 90 * time.Second,
+		MaxSandboxes:   5,
 		LogLevel:       slog.LevelDebug,
 	}
 	if got != want {
@@ -79,6 +83,8 @@ func TestLoadInvalid(t *testing.T) {
 		{"check interval not a duration", "NSL_CHECK_INTERVAL", "5"},
 		{"check interval negative", "NSL_CHECK_INTERVAL", "-1s"},
 		{"systemd timeout not a duration", "NSL_SYSTEMD_TIMEOUT", "a minute"},
+		{"max sandboxes not a number", "NSL_MAX_SANDBOXES", "many"},
+		{"max sandboxes not positive", "NSL_MAX_SANDBOXES", "0"},
 		{"log level unknown", "NSL_LOG_LEVEL", "verbose"},
 	}
 

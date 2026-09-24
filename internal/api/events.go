@@ -51,7 +51,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	events, unsubscribe := s.attempts.Subscribe(id)
 	defer unsubscribe()
 
-	view, err := s.attempts.Get(r.Context(), id)
+	view, err := s.ownedAttempt(r)
 	if err != nil {
 		s.fail(w, id, err)
 		return

@@ -85,11 +85,29 @@ func (u *Users) Local(ctx context.Context) (User, error) {
 	return u.ByUsername(ctx, LocalUsername)
 }
 
+const userSummaryColumns = userColumns + `,
+	(SELECT COUNT(*) FROM attempts WHERE attempts.user_id = users.id)`
+
+func (u *Users) SummaryByID(ctx context.Context, id string) (UserSummary, error) {
+	row := u.db.QueryRowContext(ctx, `SELECT `+userSummaryColumns+` FROM users WHERE id = ?`, id)
+
+	var summary UserSummary
+	user, err := scanUser(func(dest ...any) error {
+		return row.Scan(append(dest, &summary.Attempts)...)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return UserSummary{}, fmt.Errorf("user %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return UserSummary{}, fmt.Errorf("user %s: %w", id, err)
+	}
+	summary.User = user
+	return summary, nil
+}
+
 func (u *Users) List(ctx context.Context) ([]UserSummary, error) {
 	rows, err := u.db.QueryContext(ctx,
-		`SELECT `+userColumns+`,
-			(SELECT COUNT(*) FROM attempts WHERE attempts.user_id = users.id)
-		FROM users ORDER BY created_at, id`)
+		`SELECT `+userSummaryColumns+` FROM users ORDER BY created_at, id`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -136,6 +154,15 @@ func (u *Users) Count(ctx context.Context) (int, error) {
 	var count int
 	if err := u.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return count, nil
+}
+
+func (u *Users) CountEnabled(ctx context.Context) (int, error) {
+	var count int
+	if err := u.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE disabled_at IS NULL AND password_hash IS NOT NULL`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count enabled users: %w", err)
 	}
 	return count, nil
 }

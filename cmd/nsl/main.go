@@ -17,6 +17,7 @@ import (
 
 	"github.com/AmerDwight/network-skill-lab/internal/api"
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
+	"github.com/AmerDwight/network-skill-lab/internal/auth"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/config"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
@@ -165,6 +166,19 @@ func serve(args []string) error {
 	}()
 	logger.Info("store opened", "path", st.Path())
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	users, err := st.Users.CountEnabled(ctx)
+	if err != nil {
+		return fmt.Errorf("count users: %w", err)
+	}
+	if users == 0 {
+		logger.Warn("no account exists yet; run `nsl user add <name> --role admin` on this host to create the first one")
+	} else {
+		logger.Info("accounts ready", "users", users)
+	}
+
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return fmt.Errorf("create docker client: %w", err)
@@ -177,13 +191,15 @@ func serve(args []string) error {
 
 	provider := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance, SystemdTimeout: cfg.SystemdTimeout})
 	attempts := attempt.New(attempt.Deps{
-		Store:       st,
-		Runner:      provider,
-		Content:     loaded,
-		Image:       cfg.NodeImage,
-		RunnerID:    "docker",
-		IdleTimeout: cfg.IdleTimeout,
-		Logger:      logger,
+		Store:        st,
+		Runner:       provider,
+		Content:      loaded,
+		Image:        cfg.NodeImage,
+		RunnerID:     "docker",
+		DataDir:      cfg.DataDir,
+		MaxSandboxes: cfg.MaxSandboxes,
+		IdleTimeout:  cfg.IdleTimeout,
+		Logger:       logger,
 	})
 	defer attempts.Close()
 
@@ -206,9 +222,6 @@ func serve(args []string) error {
 	})
 	defer recordings.Close()
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	if err := attempts.Recover(ctx); err != nil {
 		return fmt.Errorf("recover attempts: %w", err)
 	}
@@ -217,12 +230,14 @@ func serve(args []string) error {
 	recordings.Start(ctx)
 
 	handler := web.NewRouter(api.New(api.Deps{
-		Attempts: attempts,
-		Content:  loaded,
-		Store:    st,
-		Runner:   provider,
-		Recorder: recordings,
-		Logger:   logger,
+		Attempts:     attempts,
+		Content:      loaded,
+		Store:        st,
+		Runner:       provider,
+		Recorder:     recordings,
+		Auth:         auth.New(st),
+		MaxSandboxes: cfg.MaxSandboxes,
+		Logger:       logger,
 	}))
 
 	srv := &http.Server{

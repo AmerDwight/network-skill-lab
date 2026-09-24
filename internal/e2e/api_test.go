@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/AmerDwight/network-skill-lab/internal/api"
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
+	"github.com/AmerDwight/network-skill-lab/internal/auth"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
@@ -36,15 +39,26 @@ const (
 	linkUpCommand = "sudo ip link set eth1 up\r"
 )
 
+// testInstance keeps this binary's garbage collection away from the sandboxes
+// of a server or another test binary running on the same daemon.
+var testInstance = "e2e-" + store.NewID()
+
 type stack struct {
 	server   *httptest.Server
 	attempts *attempt.Service
 	provider *docker.Provider
 	store    *store.Store
 	dataDir  string
+	client   *http.Client
+	users    map[string]store.User
 }
 
 func newStack(t *testing.T, cli client.APIClient) *stack {
+	t.Helper()
+	return newStackWith(t, cli, 0)
+}
+
+func newStackWith(t *testing.T, cli client.APIClient, maxSandboxes int) *stack {
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -59,14 +73,21 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	provider := docker.New(cli, docker.Options{Image: testImage})
+	provider := docker.New(cli, docker.Options{Image: testImage, Instance: testInstance})
+	t.Cleanup(func() {
+		if err := provider.GC(context.WithoutCancel(t.Context())); err != nil {
+			t.Logf("cleanup gc: %v", err)
+		}
+	})
 	attempts := attempt.New(attempt.Deps{
-		Store:    st,
-		Runner:   provider,
-		Content:  loaded,
-		Image:    testImage,
-		RunnerID: "docker",
-		Logger:   logger,
+		Store:        st,
+		Runner:       provider,
+		Content:      loaded,
+		Image:        testImage,
+		RunnerID:     "docker",
+		DataDir:      dataDir,
+		MaxSandboxes: maxSandboxes,
+		Logger:       logger,
 	})
 	t.Cleanup(attempts.Close)
 
@@ -80,19 +101,61 @@ func newStack(t *testing.T, cli client.APIClient) *stack {
 	recordings.Start(t.Context())
 
 	server := httptest.NewServer(api.New(api.Deps{
-		Attempts: attempts,
-		Content:  loaded,
-		Store:    st,
-		Runner:   provider,
-		Recorder: recordings,
-		Logger:   logger,
+		Attempts:     attempts,
+		Content:      loaded,
+		Store:        st,
+		Runner:       provider,
+		Recorder:     recordings,
+		Auth:         auth.New(st),
+		MaxSandboxes: maxSandboxes,
+		Logger:       logger,
 	}))
 	t.Cleanup(server.Close)
 
-	return &stack{server: server, attempts: attempts, provider: provider, store: st, dataDir: dataDir}
+	s := &stack{
+		server:   server,
+		attempts: attempts,
+		provider: provider,
+		store:    st,
+		dataDir:  dataDir,
+		users:    map[string]store.User{},
+	}
+	s.client = s.newUser(t, "alice")
+	return s
+}
+
+const e2ePassword = "correct horse"
+
+func (s *stack) newUser(t *testing.T, username string) *http.Client {
+	t.Helper()
+	hash, err := auth.HashPassword(e2ePassword)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	user := store.User{ID: store.NewID(), Username: username, PasswordHash: hash, Role: store.RoleUser}
+	if err := s.store.Users.Create(t.Context(), user); err != nil {
+		t.Fatalf("create user %s: %v", username, err)
+	}
+	s.users[username] = user
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookie jar: %v", err)
+	}
+	client := &http.Client{Jar: jar, Transport: s.server.Client().Transport}
+	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, e2ePassword)
+	if got := s.requestAs(t, client, http.MethodPost, "/api/auth/login", body); got["_status"] != float64(http.StatusOK) {
+		t.Fatalf("login as %s: %v", username, got)
+	}
+	return client
 }
 
 func (s *stack) request(t *testing.T, method, path, body string) map[string]any {
+	t.Helper()
+	return s.requestAs(t, s.client, method, path, body)
+}
+
+func (s *stack) requestAs(t *testing.T, client *http.Client, method, path, body string) map[string]any {
 	t.Helper()
 	var reader io.Reader
 	if body != "" {
@@ -102,7 +165,10 @@ func (s *stack) request(t *testing.T, method, path, body string) map[string]any 
 	if err != nil {
 		t.Fatalf("build request %s %s: %v", method, path, err)
 	}
-	resp, err := s.server.Client().Do(req)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("send request %s %s: %v", method, path, err)
 	}
@@ -122,11 +188,16 @@ func (s *stack) request(t *testing.T, method, path, body string) map[string]any 
 
 func (s *stack) requestArray(t *testing.T, method, path string) []any {
 	t.Helper()
+	return s.requestArrayAs(t, s.client, method, path)
+}
+
+func (s *stack) requestArrayAs(t *testing.T, client *http.Client, method, path string) []any {
+	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method, s.server.URL+path, nil)
 	if err != nil {
 		t.Fatalf("build request %s %s: %v", method, path, err)
 	}
-	resp, err := s.server.Client().Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("send request %s %s: %v", method, path, err)
 	}
@@ -148,9 +219,15 @@ func (s *stack) requestArray(t *testing.T, method, path string) []any {
 
 func (s *stack) dial(t *testing.T, path string) *websocket.Conn {
 	t.Helper()
+	return s.dialAs(t, s.client, path)
+}
+
+func (s *stack) dialAs(t *testing.T, client *http.Client, path string) *websocket.Conn {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(s.server.URL, "http")+path, nil)
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(s.server.URL, "http")+path,
+		&websocket.DialOptions{HTTPClient: client})
 	if err != nil {
 		t.Fatalf("dial %s: %v", path, err)
 	}
@@ -170,7 +247,7 @@ func TestAPIDrivesFixtureLabToPassed(t *testing.T) {
 	id := created["id"].(string)
 	t.Cleanup(func() {
 		ctx := context.WithoutCancel(t.Context())
-		if _, err := s.attempts.Abandon(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
+		if _, err := s.attempts.AbandonAsAdmin(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
 			t.Errorf("cleanup abandon: %v", err)
 		}
 		if err := s.provider.Destroy(ctx, runner.SandboxID(id)); err != nil {

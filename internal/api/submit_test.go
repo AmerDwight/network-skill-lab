@@ -29,7 +29,7 @@ func TestAttemptPayloadPerMode(t *testing.T) {
 	if ids := checkpointIDs(tutorial["checkpoints"].([]any)); len(ids) != 1 {
 		t.Errorf("tutorial checkpoints = %v, want the visible one", ids)
 	}
-	if _, err := h.attempts.Abandon(t.Context(), tutorial["id"].(string)); err != nil {
+	if _, err := h.attempts.AbandonAsAdmin(t.Context(), tutorial["id"].(string)); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 
@@ -40,7 +40,7 @@ func TestAttemptPayloadPerMode(t *testing.T) {
 	if guided["checkpoints_hidden"] != false || len(guided["checkpoints"].([]any)) != 1 {
 		t.Errorf("guided payload = %v", guided)
 	}
-	if _, err := h.attempts.Abandon(t.Context(), guided["id"].(string)); err != nil {
+	if _, err := h.attempts.AbandonAsAdmin(t.Context(), guided["id"].(string)); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 
@@ -133,7 +133,7 @@ func TestSubmitErrors(t *testing.T) {
 
 	guided := h.runningLab("net-ip-03-submit", "guided")
 	requireError(t, h.do(http.MethodPost, "/api/attempts/"+guided+"/submit", ""), http.StatusBadRequest, "mode_not_real")
-	if _, err := h.attempts.Abandon(t.Context(), guided); err != nil {
+	if _, err := h.attempts.AbandonAsAdmin(t.Context(), guided); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 
@@ -146,7 +146,7 @@ func TestSubmitErrors(t *testing.T) {
 		return err == nil && view.Status == store.StatusRunning
 	})
 
-	if _, err := h.attempts.Abandon(t.Context(), provisioning); err != nil {
+	if _, err := h.attempts.AbandonAsAdmin(t.Context(), provisioning); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 	requireError(t, h.do(http.MethodPost, "/api/attempts/"+provisioning+"/submit", ""), http.StatusConflict, "attempt_finished")

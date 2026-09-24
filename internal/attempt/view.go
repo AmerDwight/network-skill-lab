@@ -35,6 +35,7 @@ type TutorialStep struct {
 
 type View struct {
 	Id            string
+	UserID        string
 	LabID         string
 	Mode          string
 	Status        string
@@ -56,6 +57,11 @@ type View struct {
 	ServerTime    time.Time
 
 	ticket content.Localized
+}
+
+type HistoryItem struct {
+	View
+	CommandCount int
 }
 
 func (v View) Ticket(lang string) string {
@@ -100,6 +106,7 @@ func newView(att store.Attempt, lab content.Lab, resolved content.Resolved, runs
 
 	return View{
 		Id:            att.ID,
+		UserID:        att.UserID,
 		LabID:         att.LabID,
 		Mode:          att.Mode,
 		Status:        att.Status,

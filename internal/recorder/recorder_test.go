@@ -210,7 +210,7 @@ func TestFinalPullOnTerminalStatus(t *testing.T) {
 	h.pull(t)
 
 	h.runner.appendLines("web01", line("2026-09-23T10:00:05.000Z", "ip link set eth1 up", 0))
-	if _, err := h.svc.Abandon(t.Context(), h.id); err != nil {
+	if _, err := h.svc.AbandonAsAdmin(t.Context(), h.id); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 	h.waitForPull(t)

@@ -28,7 +28,7 @@ func TestRealModeHidesProgressUntilSubmit(t *testing.T) {
 	id := created["id"].(string)
 	t.Cleanup(func() {
 		ctx := context.WithoutCancel(t.Context())
-		if _, err := s.attempts.Abandon(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
+		if _, err := s.attempts.AbandonAsAdmin(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
 			t.Errorf("cleanup abandon: %v", err)
 		}
 		if err := s.provider.Destroy(ctx, runner.SandboxID(id)); err != nil {

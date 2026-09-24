@@ -161,11 +161,7 @@ func stepCompleted(step content.TrackStep, done map[attempt.ProgressKey]bool) bo
 }
 
 func (s *server) progress(r *http.Request) (map[attempt.ProgressKey]bool, error) {
-	user, err := s.store.Users.Local(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	return s.attempts.ProgressFor(r.Context(), user.ID)
+	return s.attempts.ProgressFor(r.Context(), userOf(r).ID)
 }
 
 func (s *server) markProgress(w http.ResponseWriter, r *http.Request) {
@@ -182,12 +178,7 @@ func (s *server) markProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.store.Users.Local(r.Context())
-	if err != nil {
-		s.fail(w, "", err)
-		return
-	}
-	if err := s.attempts.MarkDocRead(r.Context(), user.ID, body.Ref); err != nil {
+	if err := s.attempts.MarkDocRead(r.Context(), userOf(r).ID, body.Ref); err != nil {
 		s.fail(w, "", err)
 		return
 	}
@@ -204,26 +195,18 @@ func (s *server) createAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.store.Users.Local(r.Context())
+	view, err := s.attempts.Start(r.Context(), userOf(r).ID, body.LabID, body.Mode)
 	if err != nil {
-		s.fail(w, "", err)
-		return
-	}
-	view, err := s.attempts.Start(r.Context(), user.ID, body.LabID, body.Mode)
-	if err != nil {
-		s.fail(w, "", err)
+		if !s.failBusy(w, err) {
+			s.fail(w, "", err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusCreated, s.attemptOf(view, langOf(r)))
 }
 
 func (s *server) currentAttempt(w http.ResponseWriter, r *http.Request) {
-	user, err := s.store.Users.Local(r.Context())
-	if err != nil {
-		s.fail(w, "", err)
-		return
-	}
-	view, ok, err := s.attempts.Current(r.Context(), user.ID)
+	view, ok, err := s.attempts.Current(r.Context(), userOf(r).ID)
 	if err != nil {
 		s.fail(w, "", err)
 		return
@@ -236,10 +219,9 @@ func (s *server) currentAttempt(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getAttempt(w http.ResponseWriter, r *http.Request) {
-	id := pathParam(r, "id")
-	view, err := s.attempts.Get(r.Context(), id)
+	view, err := s.readableAttempt(r)
 	if err != nil {
-		s.fail(w, id, err)
+		s.fail(w, pathParam(r, "id"), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.attemptOf(view, langOf(r)))
@@ -247,7 +229,7 @@ func (s *server) getAttempt(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) abandonAttempt(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
-	view, err := s.attempts.Abandon(r.Context(), id)
+	view, err := s.attempts.Abandon(r.Context(), userOf(r).ID, id)
 	if err != nil {
 		s.fail(w, id, err)
 		return
@@ -257,6 +239,10 @@ func (s *server) abandonAttempt(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) submitAttempt(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
+	if _, err := s.ownedAttempt(r); err != nil {
+		s.fail(w, id, err)
+		return
+	}
 	result, err := s.attempts.Submit(r.Context(), id)
 	if err != nil {
 		s.fail(w, id, err)
@@ -269,7 +255,7 @@ func (s *server) attemptResult(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
 	lang := langOf(r)
 
-	view, err := s.attempts.Get(r.Context(), id)
+	view, err := s.readableAttempt(r)
 	if err != nil {
 		s.fail(w, id, err)
 		return

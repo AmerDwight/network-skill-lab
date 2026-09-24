@@ -123,7 +123,7 @@ func (s *server) terminal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("invalid tab %q", tab))
 		return
 	}
-	view, err := s.attempts.Get(r.Context(), id)
+	view, err := s.ownedAttempt(r)
 	if err != nil {
 		s.fail(w, id, err)
 		return

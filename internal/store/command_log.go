@@ -59,11 +59,26 @@ func (c *CommandLog) ListByAttempt(ctx context.Context, attemptID string) ([]Com
 	if err != nil {
 		return nil, fmt.Errorf("list command log of attempt %s: %w", attemptID, err)
 	}
+	return scanCommands(attemptID, rows)
+}
+
+func (c *CommandLog) ListByAttemptAfter(ctx context.Context, attemptID string, after int64, limit int) ([]CommandEntry, error) {
+	rows, err := c.db.QueryContext(ctx,
+		`SELECT id, attempt_id, node, ts, user, cwd, command, exit_code
+		FROM command_log WHERE attempt_id = ? AND id > ? ORDER BY id LIMIT ?`, attemptID, after, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list command log of attempt %s: %w", attemptID, err)
+	}
+	return scanCommands(attemptID, rows)
+}
+
+func scanCommands(attemptID string, rows *sql.Rows) ([]CommandEntry, error) {
 	defer func() { _ = rows.Close() }()
 
 	var entries []CommandEntry
 	for rows.Next() {
 		var (
+			err      error
 			entry    CommandEntry
 			ts       string
 			user     sql.NullString

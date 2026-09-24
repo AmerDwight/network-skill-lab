@@ -67,16 +67,19 @@ func TestLoadTestdata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	if ticket != "Users report web01 cannot reach db01 (10.0.5.20). Find the cause and fix it." {
-		t.Errorf("ticket = %q", ticket)
+	if want := "Users report web01 cannot reach db01 (" + params["ip_b"] + "). Find the cause and fix it."; ticket != want {
+		t.Errorf("ticket = %q, want %q", ticket, want)
 	}
 
 	topology, err := lab.Topology.Resolve(params)
 	if err != nil {
 		t.Fatalf("Topology.Resolve() error = %v", err)
 	}
-	if topology.Links[0].Addresses["web01"] != "10.0.5.10/24" {
-		t.Errorf("web01 address = %q", topology.Links[0].Addresses["web01"])
+	if want := params["ip_a"] + "/24"; topology.Links[0].Addresses["web01"] != want {
+		t.Errorf("web01 address = %q, want %q", topology.Links[0].Addresses["web01"], want)
+	}
+	if topology.Links[0].Subnet != params["subnet"] {
+		t.Errorf("subnet = %q, want %q", topology.Links[0].Subnet, params["subnet"])
 	}
 }
 

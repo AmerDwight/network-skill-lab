@@ -182,7 +182,7 @@ func TestPrecheckRespawnsUntilTheSandboxFitsTheCase(t *testing.T) {
 
 		ctx := context.WithoutCancel(t.Context())
 		if status == store.StatusRunning {
-			if _, err := svc.Abandon(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
+			if _, err := svc.AbandonAsAdmin(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
 				t.Fatalf("abandon: %v", err)
 			}
 			awaitStatus(t, statuses, 60*time.Second, store.StatusAbandoned)

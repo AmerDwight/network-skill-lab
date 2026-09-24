@@ -12,9 +12,9 @@ ticket:
 params:
   node_a: { gen: const, value: web01 }
   node_b: { gen: const, value: db01 }
-  subnet: { gen: const, value: 10.0.5.0/24 }
-  ip_a:   { gen: const, value: 10.0.5.10 }
-  ip_b:   { gen: const, value: 10.0.5.20 }
+  subnet: { gen: cidr, base: 10.0.0.0/8, prefix: 24 }
+  ip_a:   { gen: ip_in, subnet: "{{subnet}}", index: 10 }
+  ip_b:   { gen: ip_in, subnet: "{{subnet}}", index: 20 }
   iface:  { gen: const, value: eth1 }
 setup: setup.sh
 checkpoints:
