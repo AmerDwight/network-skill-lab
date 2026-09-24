@@ -436,10 +436,10 @@ func TestRecordingsRoundTrip(t *testing.T) {
 	}
 
 	endedAt := startedAt.Add(5 * time.Minute)
-	if err := s.Recordings.SetEnded(ctx, rec.ID, endedAt); err != nil {
+	if err := s.Recordings.SetEnded(ctx, rec.ID, endedAt, 4096); err != nil {
 		t.Fatalf("SetEnded: %v", err)
 	}
-	if err := s.Recordings.SetEnded(ctx, NewID(), endedAt); !errors.Is(err, ErrNotFound) {
+	if err := s.Recordings.SetEnded(ctx, NewID(), endedAt, 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("SetEnded missing = %v, want ErrNotFound", err)
 	}
 
@@ -449,6 +449,9 @@ func TestRecordingsRoundTrip(t *testing.T) {
 	}
 	if got[0].EndedAt == nil || !got[0].EndedAt.Equal(endedAt.UTC()) {
 		t.Fatalf("EndedAt = %v, want %v", got[0].EndedAt, endedAt.UTC())
+	}
+	if got[0].Bytes == nil || *got[0].Bytes != 4096 {
+		t.Fatalf("Bytes = %v, want 4096", got[0].Bytes)
 	}
 }
 

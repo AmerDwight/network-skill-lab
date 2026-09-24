@@ -11,24 +11,25 @@ type Recordings struct {
 	db *sql.DB
 }
 
-const recordingColumns = `id, attempt_id, node, tab_id, path, started_at, ended_at`
+const recordingColumns = `id, attempt_id, node, tab_id, path, started_at, ended_at, bytes`
 
 func (r *Recordings) Create(ctx context.Context, rec Recording) error {
 	if rec.StartedAt.IsZero() {
 		rec.StartedAt = time.Now()
 	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO recordings (`+recordingColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		rec.ID, rec.AttemptID, rec.Node, rec.TabID, rec.Path, formatTime(rec.StartedAt), nullTime(rec.EndedAt))
+		`INSERT INTO recordings (`+recordingColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.ID, rec.AttemptID, rec.Node, rec.TabID, rec.Path,
+		formatTime(rec.StartedAt), nullTime(rec.EndedAt), nullInt64(rec.Bytes))
 	if err != nil {
 		return fmt.Errorf("create recording %s: %w", rec.ID, err)
 	}
 	return nil
 }
 
-func (r *Recordings) SetEnded(ctx context.Context, id string, t time.Time) error {
+func (r *Recordings) SetEnded(ctx context.Context, id string, t time.Time, size int64) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE recordings SET ended_at = ? WHERE id = ?`, formatTime(t), id)
+		`UPDATE recordings SET ended_at = ?, bytes = ? WHERE id = ?`, formatTime(t), size, id)
 	if err != nil {
 		return fmt.Errorf("set ended_at of recording %s: %w", id, err)
 	}
@@ -53,9 +54,13 @@ func (r *Recordings) ListByAttempt(ctx context.Context, attemptID string) ([]Rec
 			rec       Recording
 			startedAt string
 			endedAt   sql.NullString
+			size      sql.NullInt64
 		)
-		if err := rows.Scan(&rec.ID, &rec.AttemptID, &rec.Node, &rec.TabID, &rec.Path, &startedAt, &endedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.AttemptID, &rec.Node, &rec.TabID, &rec.Path, &startedAt, &endedAt, &size); err != nil {
 			return nil, fmt.Errorf("list recordings of attempt %s: %w", attemptID, err)
+		}
+		if size.Valid {
+			rec.Bytes = &size.Int64
 		}
 		if rec.StartedAt, err = parseTime(startedAt); err != nil {
 			return nil, fmt.Errorf("list recordings of attempt %s: %w", attemptID, err)

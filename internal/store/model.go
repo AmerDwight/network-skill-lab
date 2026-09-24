@@ -23,7 +23,10 @@ const (
 	RoleUser  = "user"
 )
 
-const LocalUsername = "local"
+const (
+	LocalUsername = "local"
+	DefaultLocale = "zh"
+)
 
 type User struct {
 	ID           string
@@ -32,6 +35,24 @@ type User struct {
 	Role         string
 	Locale       string
 	CreatedAt    time.Time
+	DisabledAt   *time.Time
+	UpdatedAt    *time.Time
+}
+
+func (u User) Disabled() bool { return u.DisabledAt != nil }
+
+type UserSummary struct {
+	User
+	Attempts int
+}
+
+type Session struct {
+	ID         string
+	UserID     string
+	CreatedAt  time.Time
+	LastSeenAt time.Time
+	ExpiresAt  time.Time
+	UserAgent  string
 }
 
 type Attempt struct {
@@ -88,4 +109,5 @@ type Recording struct {
 	Path      string
 	StartedAt time.Time
 	EndedAt   *time.Time
+	Bytes     *int64
 }

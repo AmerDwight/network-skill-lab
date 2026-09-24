@@ -52,6 +52,8 @@ func run(args []string) error {
 		return serve(args[1:])
 	case "content":
 		return contentCmd(args[1:])
+	case "user":
+		return userCmd(args[1:], os.Stdin, os.Stdout)
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -70,6 +72,7 @@ func usage() {
 commands:
   serve          run the HTTP server
   content lint   validate a content directory
+  user           manage local accounts: add, passwd, disable, enable, list
   version        print the build version
 `)
 }
