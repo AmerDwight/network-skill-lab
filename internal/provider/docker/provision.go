@@ -20,18 +20,18 @@ import (
 )
 
 const (
-	bootstrapPath       = "/usr/local/sbin/nsl-bootstrap"
-	k3sContainerdDir    = "/var/lib/rancher/k3s/agent/containerd"
-	kubeconfigPath      = "/etc/rancher/k3s/k3s.yaml"
-	systemdTimeout      = 30 * time.Second
-	systemdPollInterval = 250 * time.Millisecond
-	udevTimeout         = 10 * time.Second
-	bootstrapTimeout    = 2 * time.Minute
-	setupTimeout        = 60 * time.Second
-	k3sReadyTimeout     = 90 * time.Second
-	k3sPollInterval     = time.Second
-	kubectlTimeout      = 15 * time.Second
-	stderrTailLines     = 20
+	bootstrapPath         = "/usr/local/sbin/nsl-bootstrap"
+	k3sContainerdDir      = "/var/lib/rancher/k3s/agent/containerd"
+	kubeconfigPath        = "/etc/rancher/k3s/k3s.yaml"
+	defaultSystemdTimeout = 60 * time.Second
+	systemdPollInterval   = 250 * time.Millisecond
+	udevTimeout           = 10 * time.Second
+	bootstrapTimeout      = 2 * time.Minute
+	setupTimeout          = 60 * time.Second
+	k3sReadyTimeout       = 90 * time.Second
+	k3sPollInterval       = time.Second
+	kubectlTimeout        = 15 * time.Second
+	stderrTailLines       = 20
 
 	// Link endpoints outrank the mgmt endpoint on a lexicographic tie, so without this
 	// the default gateway would move onto a link the moment one is no longer internal.
@@ -104,7 +104,7 @@ func (p *Provider) provision(ctx context.Context, spec runner.SandboxSpec, log *
 
 func (p *Provider) createNetworks(ctx context.Context, spec runner.SandboxSpec, log *slog.Logger) error {
 	mgmt := mgmtNetworkName(spec.AttemptID)
-	mgmtOpts := network.CreateOptions{Internal: !spec.Internet, Labels: attemptLabels(spec.AttemptID)}
+	mgmtOpts := network.CreateOptions{Internal: !spec.Internet, Labels: attemptLabels(p.opts.Instance, spec.AttemptID)}
 	if _, err := p.cli.NetworkCreate(ctx, mgmt, mgmtOpts); err != nil {
 		return fmt.Errorf("network %s: %w", mgmt, err)
 	}
@@ -115,7 +115,7 @@ func (p *Provider) createNetworks(ctx context.Context, spec runner.SandboxSpec, 
 		opts := network.CreateOptions{
 			Options: linkNetworkOptions,
 			IPAM:    &network.IPAM{Config: []network.IPAMConfig{{Subnet: link.Subnet}}},
-			Labels:  attemptLabels(spec.AttemptID),
+			Labels:  attemptLabels(p.opts.Instance, spec.AttemptID),
 		}
 		if _, err := p.cli.NetworkCreate(ctx, name, opts); err != nil {
 			return fmt.Errorf("network %s: %w", name, err)
@@ -137,7 +137,7 @@ func (p *Provider) createContainers(ctx context.Context, spec runner.SandboxSpec
 		config := &container.Config{
 			Image:      image,
 			Hostname:   node.Name,
-			Labels:     nodeLabels(spec.AttemptID, node.Name, node.Role),
+			Labels:     nodeLabels(p.opts.Instance, spec.AttemptID, node.Name, node.Role),
 			StopSignal: "SIGRTMIN+3",
 		}
 		hostConfig := &container.HostConfig{
@@ -182,13 +182,18 @@ func (p *Provider) connectLinks(ctx context.Context, spec runner.SandboxSpec, lo
 }
 
 func (p *Provider) waitSystemd(ctx context.Context, spec runner.SandboxSpec, log *slog.Logger) error {
+	timeout := p.opts.SystemdTimeout
 	return forEachNode(spec.Nodes, func(node runner.NodeSpec) error {
 		name := containerName(spec.AttemptID, node.Name)
-		deadline := time.Now().Add(systemdTimeout)
+		deadline := time.Now().Add(timeout)
+		var state string
 		for {
 			result, err := p.exec(ctx, name, []string{"systemctl", "is-system-running"}, runner.ExecOptions{})
-			if err == nil {
-				switch strings.TrimSpace(string(result.Stdout)) {
+			if err != nil {
+				state = err.Error()
+			} else {
+				state = strings.TrimSpace(string(result.Stdout))
+				switch state {
 				case "running":
 					log.Debug("systemd ready", "node", node.Name)
 					return nil
@@ -199,7 +204,8 @@ func (p *Provider) waitSystemd(ctx context.Context, spec runner.SandboxSpec, log
 				}
 			}
 			if time.Now().After(deadline) {
-				return fmt.Errorf("node %s: systemd not ready within %s", node.Name, systemdTimeout)
+				return fmt.Errorf("node %s: systemd not ready within %s, last state %q\npending jobs:\n%s",
+					node.Name, timeout, state, p.pendingJobs(ctx, name))
 			}
 			select {
 			case <-ctx.Done():
@@ -208,6 +214,17 @@ func (p *Provider) waitSystemd(ctx context.Context, spec runner.SandboxSpec, log
 			}
 		}
 	})
+}
+
+func (p *Provider) pendingJobs(ctx context.Context, name string) string {
+	result, err := p.exec(ctx, name, []string{"systemctl", "list-jobs", "--no-legend"}, runner.ExecOptions{})
+	if err != nil {
+		return fmt.Sprintf("list-jobs failed: %v", err)
+	}
+	if jobs := strings.TrimSpace(string(result.Stdout)); jobs != "" {
+		return jobs
+	}
+	return "none"
 }
 
 func (p *Provider) logFailedUnits(ctx context.Context, name, node string, log *slog.Logger) {

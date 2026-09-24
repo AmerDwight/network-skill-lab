@@ -83,6 +83,7 @@ beforeEach(async () => {
     docker: true,
     image: true,
     image_name: "nsl/node",
+    instance: "test",
     mem_available_mb: 2048,
     error: "",
   });

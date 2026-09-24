@@ -1,20 +1,25 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 )
 
 type Config struct {
-	Listen        string
-	DataDir       string
-	ContentDir    string
-	NodeImage     string
-	IdleTimeout   time.Duration
-	CheckInterval time.Duration
-	LogLevel      slog.Level
+	Listen         string
+	DataDir        string
+	ContentDir     string
+	NodeImage      string
+	Instance       string
+	IdleTimeout    time.Duration
+	CheckInterval  time.Duration
+	SystemdTimeout time.Duration
+	LogLevel       slog.Level
 }
 
 func Load() (Config, error) {
@@ -24,6 +29,7 @@ func Load() (Config, error) {
 		ContentDir: lookupString("NSL_CONTENT_DIR", "./content"),
 		NodeImage:  lookupString("NSL_NODE_IMAGE", "nsl/node"),
 	}
+	cfg.Instance = lookupString("NSL_INSTANCE", instanceID(cfg.DataDir))
 
 	var err error
 	if cfg.IdleTimeout, err = lookupDuration("NSL_IDLE_TIMEOUT", 15*time.Minute); err != nil {
@@ -32,10 +38,24 @@ func Load() (Config, error) {
 	if cfg.CheckInterval, err = lookupDuration("NSL_CHECK_INTERVAL", 5*time.Second); err != nil {
 		return Config{}, err
 	}
+	if cfg.SystemdTimeout, err = lookupDuration("NSL_SYSTEMD_TIMEOUT", 60*time.Second); err != nil {
+		return Config{}, err
+	}
 	if cfg.LogLevel, err = lookupLevel("NSL_LOG_LEVEL", slog.LevelInfo); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// instanceID keys the Docker labels that scope garbage collection, so two nsl
+// processes only ever collect their own sandboxes when their data dirs differ.
+func instanceID(dataDir string) string {
+	path, err := filepath.Abs(dataDir)
+	if err != nil {
+		path = dataDir
+	}
+	sum := sha256.Sum256([]byte(path))
+	return hex.EncodeToString(sum[:4])
 }
 
 func lookupString(key, fallback string) string {

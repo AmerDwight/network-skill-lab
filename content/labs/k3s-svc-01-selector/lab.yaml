@@ -13,7 +13,6 @@ ticket:
   en: "The {{app}} service in {{namespace}} returns connection refused on port {{port}} from inside the cluster, even though its pod looks Running. Make the service answer again."
 params:
   image: { gen: const, value: "docker.io/rancher/mirrored-library-busybox:1.37.0" }
-  service_cidr: { gen: const, value: "10.43.0.0/16" }
   subnet: { gen: cidr, base: 10.128.0.0/9, prefix: 24 }
   ip_server: { gen: ip_in, subnet: "{{subnet}}", index: 10 }
   ip_agent: { gen: ip_in, subnet: "{{subnet}}", index: 20 }

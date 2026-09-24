@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
 	cerrdefs "github.com/containerd/errdefs"
@@ -18,9 +19,19 @@ import (
 	"github.com/docker/docker/client"
 )
 
+const (
+	defaultInstance       = "default"
+	networkRemoveAttempts = 5
+	activeEndpoints       = "has active endpoints"
+)
+
+var networkRemoveBackoff = time.Second
+
 type Options struct {
-	Image    string
-	MemLimit int64
+	Image          string
+	Instance       string
+	MemLimit       int64
+	SystemdTimeout time.Duration
 }
 
 type Provider struct {
@@ -31,6 +42,12 @@ type Provider struct {
 func New(cli client.APIClient, opts Options) *Provider {
 	if opts.Image == "" {
 		opts.Image = "nsl/node"
+	}
+	if opts.Instance == "" {
+		opts.Instance = defaultInstance
+	}
+	if opts.SystemdTimeout <= 0 {
+		opts.SystemdTimeout = defaultSystemdTimeout
 	}
 	return &Provider{cli: cli, opts: opts}
 }
@@ -54,7 +71,8 @@ func (p *Provider) Destroy(ctx context.Context, sb runner.SandboxID) error {
 }
 
 func (p *Provider) GC(ctx context.Context) error {
-	if err := p.remove(ctx, managedFilter(), slog.Default()); err != nil {
+	log := slog.Default().With("instance", p.opts.Instance)
+	if err := p.remove(ctx, instanceFilter(p.opts.Instance), log); err != nil {
 		return fmt.Errorf("gc: %w", err)
 	}
 	return nil
@@ -80,7 +98,7 @@ func (p *Provider) remove(ctx context.Context, f filters.Args, log *slog.Logger)
 		return errors.Join(append(errs, fmt.Errorf("list networks: %w", err))...)
 	}
 	for _, n := range networks {
-		if err := p.cli.NetworkRemove(ctx, n.ID); err != nil && !cerrdefs.IsNotFound(err) {
+		if err := p.removeNetwork(ctx, n.ID); err != nil {
 			errs = append(errs, fmt.Errorf("remove network %s: %w", n.ID, err))
 			continue
 		}
@@ -89,8 +107,32 @@ func (p *Provider) remove(ctx context.Context, f filters.Args, log *slog.Logger)
 	return errors.Join(errs...)
 }
 
+// removeNetwork retries while the daemon still sees endpoints: containers that were
+// removed a moment ago are detached asynchronously.
+func (p *Provider) removeNetwork(ctx context.Context, id string) error {
+	var err error
+	for attempt := range networkRemoveAttempts {
+		err = p.cli.NetworkRemove(ctx, id)
+		if err == nil || cerrdefs.IsNotFound(err) {
+			return nil
+		}
+		if !strings.Contains(err.Error(), activeEndpoints) {
+			return err
+		}
+		if attempt == networkRemoveAttempts-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(networkRemoveBackoff):
+		}
+	}
+	return err
+}
+
 func (p *Provider) Health(ctx context.Context) runner.Health {
-	health := runner.Health{ImageName: p.opts.Image, MemAvailableMB: memAvailableMB()}
+	health := runner.Health{ImageName: p.opts.Image, Instance: p.opts.Instance, MemAvailableMB: memAvailableMB()}
 	if _, err := p.cli.Ping(ctx); err != nil {
 		health.Error = fmt.Sprintf("ping docker: %v", err)
 		return health

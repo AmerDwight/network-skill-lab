@@ -318,7 +318,7 @@ func (s *Service) Recover(ctx context.Context) error {
 	s.log.Info("expired attempts left behind by the previous run", "count", len(attempts))
 
 	if err := s.runner.GC(ctx); err != nil {
-		return fmt.Errorf("collect leftover sandboxes: %w", err)
+		s.log.Warn("collect leftover sandboxes", "error", err)
 	}
 	return nil
 }

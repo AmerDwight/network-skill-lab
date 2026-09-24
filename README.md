@@ -55,6 +55,36 @@ The frontend builds into `internal/web/dist`, which `internal/web` embeds, so
 any Go build or test needs `make web` (or `make build`) to have run at least
 once.
 
+## Sandbox host
+
+Every sandbox node is a privileged container running systemd, so a few host
+resources are shared by all of them.
+
+`fs.inotify.max_user_instances` is shared by every container running as root,
+and each node needs several instances for systemd, udevd and journald. The WSL2
+default of 128 is exhausted at roughly a dozen concurrent nodes, after which
+`systemd-udevd` fails to start and netplan cannot apply the node's addresses.
+Raise it on the host before running more than a couple of sandboxes:
+
+```sh
+sudo sysctl -w fs.inotify.max_user_instances=1024
+sudo sysctl -w fs.inotify.max_user_watches=524288
+```
+
+Make it permanent with a line in `/etc/sysctl.d/99-nsl.conf`. `nsl serve` logs a
+warning at startup when the limit is below 512.
+
+Memory is the other limit. A settled `ubuntu` or `ubuntu-nm` node uses about
+30 MB, a `k3s-agent` about 200 MB and a `k3s-server` about 600 MB, so budget
+roughly 1 GB for a two-node k3s lab and leave headroom for the image pulls
+during setup. `/api/health` reports the memory still available.
+
+Two `nsl` processes on the same Docker daemon must use different data dirs.
+Garbage collection only touches resources labelled with the process's own
+instance id, which is derived from the absolute data dir, or taken from
+`NSL_INSTANCE`; `/api/health` reports it as `instance`. `nsl gc` removes the
+leftover sandboxes of that instance by hand.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -63,8 +93,10 @@ once.
 | `NSL_DATA_DIR` | `./data` | SQLite database and recordings |
 | `NSL_CONTENT_DIR` | `./content` | Lab content root |
 | `NSL_NODE_IMAGE` | `nsl/node` | Sandbox node image |
+| `NSL_INSTANCE` | hash of the data dir | Label that scopes garbage collection |
 | `NSL_IDLE_TIMEOUT` | `15m` | Idle attempt timeout |
 | `NSL_CHECK_INTERVAL` | `5s` | Checkpoint evaluation interval |
+| `NSL_SYSTEMD_TIMEOUT` | `60s` | How long provisioning waits for systemd on a node |
 | `NSL_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 
 ## License

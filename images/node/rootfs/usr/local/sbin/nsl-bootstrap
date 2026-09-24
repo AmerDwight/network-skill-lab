@@ -90,6 +90,21 @@ print_disable() {
   done
 }
 
+k3s_cidr() {
+  local key="$1" fallback="$2" value=""
+  if [ -f /etc/rancher/k3s/config.yaml ]; then
+    value="$(awk -v k="$key:" '$1 == k { gsub(/"/, "", $2); print $2; exit }' /etc/rancher/k3s/config.yaml)"
+  fi
+  printf '%s' "${value:-$fallback}"
+}
+
+start_flannel_routes() {
+  mkdir -p /run/nsl
+  printf 'NSL_K3S_CIDRS=%s %s\n' "$(k3s_cidr cluster-cidr 10.42.0.0/16)" "$(k3s_cidr service-cidr 10.43.0.0/16)" \
+    > /run/nsl/k3s-routes.env
+  systemctl enable --now --no-block nsl-k3s-routes
+}
+
 first_ip() {
   [ -n "$NSL_IFACES" ] || return 0
   local first="${NSL_IFACES%%,*}"
@@ -121,6 +136,7 @@ start_k3s() {
       systemctl enable --now --no-block k3s-agent
       ;;
   esac
+  start_flannel_routes
 }
 
 detach_docker_files

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Routes the k3s cluster and service CIDRs onto the flannel interface.
+# Without a default route (internet: false) a node cannot reach a ClusterIP of its
+# own cluster until these are routed explicitly.
+# Usage: nsl-k3s-routes <cidr>...
+set -euo pipefail
+
+IFACE=flannel.1
+TIMEOUT="${NSL_FLANNEL_TIMEOUT:-300}"
+
+deadline=$((SECONDS + TIMEOUT))
+while [ ! -e "/sys/class/net/$IFACE" ]; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    printf 'nsl-k3s-routes: %s did not appear within %ss\n' "$IFACE" "$TIMEOUT" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+for cidr in "$@"; do
+  ip route replace "$cidr" dev "$IFACE"
+  printf 'nsl-k3s-routes: routed %s via %s\n' "$cidr" "$IFACE"
+done

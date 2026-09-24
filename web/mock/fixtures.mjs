@@ -3,6 +3,7 @@ export const health = {
   docker: true,
   image: true,
   image_name: "nsl/node",
+  instance: "mock",
   mem_available_mb: 4096,
   error: "",
 };

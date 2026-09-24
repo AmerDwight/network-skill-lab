@@ -1,0 +1,12 @@
+[Unit]
+Description=Route the k3s cluster and service CIDRs via flannel
+After=k3s.service k3s-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/run/nsl/k3s-routes.env
+ExecStart=/usr/local/sbin/nsl-k3s-routes $NSL_K3S_CIDRS
+
+[Install]
+WantedBy=multi-user.target

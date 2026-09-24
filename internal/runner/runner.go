@@ -79,6 +79,7 @@ type Health struct {
 	Docker         bool
 	Image          bool
 	ImageName      string
+	Instance       string
 	MemAvailableMB int
 	Error          string
 }

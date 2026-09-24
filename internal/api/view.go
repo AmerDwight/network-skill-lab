@@ -18,6 +18,7 @@ type healthJSON struct {
 	Docker         bool   `json:"docker"`
 	Image          bool   `json:"image"`
 	ImageName      string `json:"image_name"`
+	Instance       string `json:"instance"`
 	MemAvailableMB int    `json:"mem_available_mb"`
 	Error          string `json:"error"`
 }
@@ -163,6 +164,7 @@ func healthOf(h runner.Health) healthJSON {
 		Docker:         h.Docker,
 		Image:          h.Image,
 		ImageName:      h.ImageName,
+		Instance:       h.Instance,
 		MemAvailableMB: h.MemAvailableMB,
 		Error:          h.Error,
 	}

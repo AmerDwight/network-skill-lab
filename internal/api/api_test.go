@@ -78,7 +78,7 @@ func TestHealth(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body := decodeJSON(t, resp)
-	requireKeys(t, body, "ok", "docker", "image", "image_name", "mem_available_mb", "error")
+	requireKeys(t, body, "ok", "docker", "image", "image_name", "instance", "mem_available_mb", "error")
 	if body["ok"] != true || body["image_name"] != "nsl/node" {
 		t.Errorf("health = %v", body)
 	}
