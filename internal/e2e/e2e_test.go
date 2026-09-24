@@ -132,7 +132,7 @@ func TestFixtureLabRunsToPassed(t *testing.T) {
 		chk.Close()
 		rec.Close()
 		ctx := context.WithoutCancel(t.Context())
-		if _, err := svc.Abandon(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
+		if _, err := svc.AbandonAsAdmin(ctx, id); err != nil && !errors.Is(err, attempt.ErrTerminal) {
 			t.Errorf("cleanup abandon: %v", err)
 		}
 		svc.Close()

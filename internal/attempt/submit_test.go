@@ -163,7 +163,7 @@ func TestSubmitRejectsProvisioningAndTerminalAttempts(t *testing.T) {
 
 	close(fr.block)
 	h.waitForStatus(t, store.StatusRunning)
-	if _, err := h.Abandon(t.Context(), view.Id); err != nil {
+	if _, err := h.AbandonAsAdmin(t.Context(), view.Id); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 	if _, err := h.Submit(t.Context(), view.Id); !errors.Is(err, ErrTerminal) {

@@ -39,6 +39,14 @@ func (r *Recordings) SetEnded(ctx context.Context, id string, t time.Time, size 
 	return nil
 }
 
+func (r *Recordings) TotalBytes(ctx context.Context) (int64, error) {
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, `SELECT SUM(bytes) FROM recordings`).Scan(&total); err != nil {
+		return 0, fmt.Errorf("total recording bytes: %w", err)
+	}
+	return total.Int64, nil
+}
+
 func (r *Recordings) ListByAttempt(ctx context.Context, attemptID string) ([]Recording, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+recordingColumns+` FROM recordings WHERE attempt_id = ? ORDER BY started_at, id`,

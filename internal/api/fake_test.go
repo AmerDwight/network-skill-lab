@@ -3,9 +3,11 @@ package api
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/AmerDwight/network-skill-lab/internal/attempt"
+	"github.com/AmerDwight/network-skill-lab/internal/auth"
 	"github.com/AmerDwight/network-skill-lab/internal/checker"
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
@@ -297,9 +300,14 @@ type harness struct {
 	store    *store.Store
 	runner   *fakeRunner
 	clock    *fakeClock
+	auth     *auth.Service
+	recorder *recorder.Recorder
 	labs     []content.Lab
 	user     store.User
+	admin    store.User
+	other    store.User
 	dataDir  string
+	client   *http.Client
 }
 
 func newHarness(t *testing.T) *harness {
@@ -308,6 +316,21 @@ func newHarness(t *testing.T) *harness {
 }
 
 func newHarnessWithContent(t *testing.T, dir string) *harness {
+	t.Helper()
+	return newHarnessWith(t, dir, 0)
+}
+
+func newHarnessWith(t *testing.T, dir string, maxSandboxes int) *harness {
+	t.Helper()
+	h := newBareHarness(t, dir, maxSandboxes)
+	h.user = h.addUser(testUsername, testPassword, store.RoleUser)
+	h.admin = h.addUser("root", testPassword, store.RoleAdmin)
+	h.other = h.addUser("mallory", testPassword, store.RoleUser)
+	h.client = h.login(testUsername, testPassword)
+	return h
+}
+
+func newBareHarness(t *testing.T, dir string, maxSandboxes int) *harness {
 	t.Helper()
 
 	loaded, err := content.LoadAll(dir)
@@ -321,22 +344,19 @@ func newHarnessWithContent(t *testing.T, dir string) *harness {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	user, err := st.Users.Local(t.Context())
-	if err != nil {
-		t.Fatalf("local user: %v", err)
-	}
-
 	fake := newFakeRunner()
 	clock := &fakeClock{}
 	logger := discardLogger()
 	attempts := attempt.New(attempt.Deps{
-		Store:    st,
-		Runner:   fake,
-		Content:  loaded,
-		Image:    "nsl/node",
-		RunnerID: "fake",
-		After:    clock.After,
-		Logger:   logger,
+		Store:        st,
+		Runner:       fake,
+		Content:      loaded,
+		Image:        "nsl/node",
+		RunnerID:     "fake",
+		DataDir:      dataDir,
+		MaxSandboxes: maxSandboxes,
+		After:        clock.After,
+		Logger:       logger,
 	})
 	t.Cleanup(attempts.Close)
 
@@ -360,13 +380,16 @@ func newHarnessWithContent(t *testing.T, dir string) *harness {
 	})
 	t.Cleanup(recordings.Close)
 
+	sessions := auth.New(st)
 	server := httptest.NewServer(New(Deps{
-		Attempts: attempts,
-		Content:  loaded,
-		Store:    st,
-		Runner:   fake,
-		Recorder: recordings,
-		Logger:   logger,
+		Attempts:     attempts,
+		Content:      loaded,
+		Store:        st,
+		Runner:       fake,
+		Recorder:     recordings,
+		Auth:         sessions,
+		MaxSandboxes: maxSandboxes,
+		Logger:       logger,
 	}))
 	t.Cleanup(server.Close)
 
@@ -378,13 +401,56 @@ func newHarnessWithContent(t *testing.T, dir string) *harness {
 		store:    st,
 		runner:   fake,
 		clock:    clock,
+		auth:     sessions,
+		recorder: recordings,
 		labs:     loaded.Labs,
-		user:     user,
 		dataDir:  dataDir,
 	}
 }
 
+const (
+	testUsername = "tester"
+	testPassword = "correct horse"
+)
+
+func (h *harness) addUser(username, password, role string) store.User {
+	h.t.Helper()
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		h.t.Fatalf("hash password: %v", err)
+	}
+	user := store.User{ID: store.NewID(), Username: username, PasswordHash: hash, Role: role}
+	if err := h.store.Users.Create(h.t.Context(), user); err != nil {
+		h.t.Fatalf("create user %s: %v", username, err)
+	}
+	created, err := h.store.Users.ByID(h.t.Context(), user.ID)
+	if err != nil {
+		h.t.Fatalf("read back user %s: %v", username, err)
+	}
+	return created
+}
+
+func (h *harness) login(username, password string) *http.Client {
+	h.t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		h.t.Fatalf("cookie jar: %v", err)
+	}
+	client := &http.Client{Jar: jar, Transport: h.server.Client().Transport}
+	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, password)
+	resp := h.send(client, http.MethodPost, "/api/auth/login", body)
+	if resp.StatusCode != http.StatusOK {
+		h.t.Fatalf("login as %s: status = %d", username, resp.StatusCode)
+	}
+	return client
+}
+
 func (h *harness) do(method, path, body string) *http.Response {
+	h.t.Helper()
+	return h.send(h.client, method, path, body)
+}
+
+func (h *harness) request(method, path, body string) *http.Request {
 	h.t.Helper()
 	var reader io.Reader
 	if body != "" {
@@ -394,7 +460,15 @@ func (h *harness) do(method, path, body string) *http.Response {
 	if err != nil {
 		h.t.Fatalf("build request %s %s: %v", method, path, err)
 	}
-	resp, err := h.server.Client().Do(req)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req
+}
+
+func (h *harness) send(client *http.Client, method, path, body string) *http.Response {
+	h.t.Helper()
+	resp, err := client.Do(h.request(method, path, body))
 	if err != nil {
 		h.t.Fatalf("send request %s %s: %v", method, path, err)
 	}
@@ -448,6 +522,32 @@ func (h *harness) submit(id string) map[string]any {
 		h.t.Fatalf("submit attempt: status = %d", resp.StatusCode)
 	}
 	return decodeJSON(h.t, resp)
+}
+
+func (h *harness) writeCast(id, node, tab string) store.Recording {
+	h.t.Helper()
+	cast, err := h.recorder.OpenRecording(h.t.Context(), id, node, tab, 80, 24)
+	if err != nil {
+		h.t.Fatalf("open recording: %v", err)
+	}
+	if err := cast.Output([]byte("hello from " + node + "\r\n")); err != nil {
+		h.t.Fatalf("write recording: %v", err)
+	}
+	if err := cast.Close(); err != nil {
+		h.t.Fatalf("close recording: %v", err)
+	}
+
+	found, err := h.store.Recordings.ListByAttempt(h.t.Context(), id)
+	if err != nil {
+		h.t.Fatalf("list recordings: %v", err)
+	}
+	for _, rec := range found {
+		if rec.Node == node && rec.TabID == tab {
+			return rec
+		}
+	}
+	h.t.Fatalf("recording for %s/%s was not stored", node, tab)
+	return store.Recording{}
 }
 
 func (h *harness) socketURL(path string) string {

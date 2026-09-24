@@ -16,14 +16,22 @@ const idleTimeout = 15 * time.Minute
 
 func dial(t *testing.T, h *harness, path string) *websocket.Conn {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), waitTimeout)
-	defer cancel()
-	conn, _, err := websocket.Dial(ctx, h.socketURL(path), nil)
+	conn, _, err := dialAs(t, h, h.client, path)
 	if err != nil {
 		t.Fatalf("dial %s: %v", path, err)
 	}
-	t.Cleanup(func() { _ = conn.CloseNow() })
 	return conn
+}
+
+func dialAs(t *testing.T, h *harness, client *http.Client, path string) (*websocket.Conn, *http.Response, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), waitTimeout)
+	defer cancel()
+	conn, resp, err := websocket.Dial(ctx, h.socketURL(path), &websocket.DialOptions{HTTPClient: client})
+	if conn != nil {
+		t.Cleanup(func() { _ = conn.CloseNow() })
+	}
+	return conn, resp, err
 }
 
 func readFrame(t *testing.T, conn *websocket.Conn) (websocket.MessageType, []byte) {

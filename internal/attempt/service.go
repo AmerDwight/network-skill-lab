@@ -29,6 +29,8 @@ const (
 	precheckTimeout     = 30 * time.Second
 	precheckTailLines   = 20
 	destroyTimeout      = 2 * time.Minute
+	defaultMaxSandboxes = 3
+	recordingsDir       = "recordings"
 	storeTimeout        = 10 * time.Second
 	defaultHookTimeout  = 5 * time.Second
 )
@@ -44,7 +46,19 @@ var (
 	ErrModeNotAllowed = errors.New("mode not allowed by the lab")
 	ErrModeNotReal    = errors.New("attempt is not in real mode")
 	ErrNoSweeper      = errors.New("no checker is wired to the attempt service")
+	ErrRunnerBusy     = errors.New("all sandbox slots are in use")
 )
+
+type RunnerBusy struct {
+	Active int
+	Max    int
+}
+
+func (e RunnerBusy) Error() string {
+	return fmt.Sprintf("%s: %d of %d", ErrRunnerBusy, e.Active, e.Max)
+}
+
+func (e RunnerBusy) Unwrap() error { return ErrRunnerBusy }
 
 type Deps struct {
 	Store        *store.Store
@@ -52,6 +66,8 @@ type Deps struct {
 	Content      *content.Content
 	Image        string
 	RunnerID     string
+	DataDir      string
+	MaxSandboxes int
 	IdleTimeout  time.Duration
 	TickInterval time.Duration
 	HookTimeout  time.Duration
@@ -71,6 +87,8 @@ type Service struct {
 	docs         map[string]content.Doc
 	image        string
 	runnerID     string
+	dataDir      string
+	maxSandboxes int
 	idleTimeout  time.Duration
 	tickInterval time.Duration
 	hookTimeout  time.Duration
@@ -83,6 +101,8 @@ type Service struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	closeOnce sync.Once
+
+	startMu sync.Mutex
 
 	mu      sync.Mutex
 	tracked map[string]*tracker
@@ -126,6 +146,9 @@ func New(deps Deps) *Service {
 	for _, doc := range deps.Content.Docs {
 		docs[doc.ID] = doc
 	}
+	if deps.MaxSandboxes <= 0 {
+		deps.MaxSandboxes = defaultMaxSandboxes
+	}
 	if deps.IdleTimeout <= 0 {
 		deps.IdleTimeout = defaultIdleTimeout
 	}
@@ -153,6 +176,8 @@ func New(deps Deps) *Service {
 		docs:         docs,
 		image:        deps.Image,
 		runnerID:     deps.RunnerID,
+		dataDir:      deps.DataDir,
+		maxSandboxes: deps.MaxSandboxes,
 		idleTimeout:  deps.IdleTimeout,
 		tickInterval: deps.TickInterval,
 		hookTimeout:  deps.HookTimeout,
@@ -222,12 +247,6 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 		return View{}, fmt.Errorf("%w: lab %s does not offer %s", ErrModeNotAllowed, labID, mode)
 	}
 
-	if _, active, err := s.store.Attempts.ActiveForUser(ctx, userID); err != nil {
-		return View{}, err
-	} else if active {
-		return View{}, fmt.Errorf("%w: user %s", ErrActiveAttempt, userID)
-	}
-
 	seed, err := newSeed()
 	if err != nil {
 		return View{}, err
@@ -255,7 +274,7 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 		Status:     store.StatusProvisioning,
 		CreatedAt:  now,
 	}
-	if err := s.store.Attempts.Create(ctx, att); err != nil {
+	if err := s.reserve(ctx, att); err != nil {
 		return View{}, err
 	}
 
@@ -268,12 +287,84 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 	return s.view(ctx, att)
 }
 
+func (s *Service) reserve(ctx context.Context, att store.Attempt) error {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+
+	if _, active, err := s.store.Attempts.ActiveForUser(ctx, att.UserID); err != nil {
+		return err
+	} else if active {
+		return fmt.Errorf("%w: user %s", ErrActiveAttempt, att.UserID)
+	}
+	active, err := s.store.Attempts.CountActive(ctx)
+	if err != nil {
+		return err
+	}
+	if active >= s.maxSandboxes {
+		return RunnerBusy{Active: active, Max: s.maxSandboxes}
+	}
+	return s.store.Attempts.Create(ctx, att)
+}
+
 func (s *Service) Get(ctx context.Context, id string) (View, error) {
 	att, err := s.get(ctx, id)
 	if err != nil {
 		return View{}, err
 	}
 	return s.view(ctx, att)
+}
+
+func (s *Service) ForUser(ctx context.Context, userID, id string) (View, error) {
+	att, err := s.get(ctx, id)
+	if err != nil {
+		return View{}, err
+	}
+	if att.UserID != userID {
+		return View{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	return s.view(ctx, att)
+}
+
+func (s *Service) ListHistory(ctx context.Context, userID string, before time.Time, limit int) ([]HistoryItem, error) {
+	attempts, err := s.store.Attempts.ListByUser(ctx, userID, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]HistoryItem, 0, len(attempts))
+	for _, att := range attempts {
+		view, err := s.view(ctx, att)
+		if errors.Is(err, ErrUnknownLab) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		count, err := s.store.CommandLog.CountByAttempt(ctx, att.ID)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, HistoryItem{View: view, CommandCount: count})
+	}
+	return items, nil
+}
+
+func (s *Service) ListActive(ctx context.Context) ([]View, error) {
+	attempts, err := s.store.Attempts.ListNonTerminal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]View, 0, len(attempts))
+	for _, att := range attempts {
+		view, err := s.view(ctx, att)
+		if errors.Is(err, ErrUnknownLab) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
+	}
+	return views, nil
 }
 
 func (s *Service) Current(ctx context.Context, userID string) (View, bool, error) {
@@ -288,12 +379,40 @@ func (s *Service) Current(ctx context.Context, userID string) (View, bool, error
 	return view, true, nil
 }
 
-func (s *Service) Abandon(ctx context.Context, id string) (View, error) {
+func (s *Service) Abandon(ctx context.Context, userID, id string) (View, error) {
+	if _, err := s.ForUser(ctx, userID, id); err != nil {
+		return View{}, err
+	}
+	return s.AbandonAsAdmin(ctx, id)
+}
+
+func (s *Service) AbandonAsAdmin(ctx context.Context, id string) (View, error) {
 	att, err := s.end(ctx, id, store.StatusAbandoned, "", store.StatusProvisioning, store.StatusRunning)
 	if err != nil {
 		return View{}, err
 	}
 	return s.view(ctx, att)
+}
+
+func (s *Service) Delete(ctx context.Context, id string) error {
+	att, err := s.get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !isTerminal(att.Status) {
+		return fmt.Errorf("%w: %s is %s", ErrNotTerminal, id, att.Status)
+	}
+	if err := s.store.Attempts.Delete(ctx, id); err != nil {
+		return err
+	}
+	if s.dataDir == "" {
+		return nil
+	}
+	dir := filepath.Join(s.dataDir, recordingsDir, id)
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove recordings of attempt %s: %w", id, err)
+	}
+	return nil
 }
 
 func (s *Service) Finish(ctx context.Context, id, status string) error {

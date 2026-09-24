@@ -26,10 +26,11 @@ type harness struct {
 	*Service
 	clock  *fakeClock
 	runner *fakeRunner
-	store  *store.Store
-	lab    content.Lab
-	user   string
-	events <-chan Event
+	store   *store.Store
+	dataDir string
+	lab     content.Lab
+	user    string
+	events  <-chan Event
 }
 
 func newHarness(t *testing.T, fr *fakeRunner) *harness {
@@ -49,8 +50,14 @@ func newHarnessWithContent(t *testing.T, fr *fakeRunner, dir string) *harness {
 
 func newHarnessFor(t *testing.T, fr *fakeRunner, loaded *content.Content) *harness {
 	t.Helper()
+	return newHarnessWith(t, fr, loaded, 0)
+}
 
-	st, err := store.Open(t.TempDir())
+func newHarnessWith(t *testing.T, fr *fakeRunner, loaded *content.Content, maxSandboxes int) *harness {
+	t.Helper()
+
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -68,6 +75,8 @@ func newHarnessFor(t *testing.T, fr *fakeRunner, loaded *content.Content) *harne
 		Content:      loaded,
 		Image:        "nsl/node",
 		RunnerID:     "fake",
+		DataDir:      dataDir,
+		MaxSandboxes: maxSandboxes,
 		IdleTimeout:  testIdleTimeout,
 		TickInterval: testTickInterval,
 		HookTimeout:  testHookTimeout,
@@ -80,7 +89,7 @@ func newHarnessFor(t *testing.T, fr *fakeRunner, loaded *content.Content) *harne
 	events, unsubscribe := svc.SubscribeAll()
 	t.Cleanup(unsubscribe)
 
-	return &harness{Service: svc, clock: clock, runner: fr, store: st, lab: loaded.Labs[0], user: user.ID, events: events}
+	return &harness{Service: svc, clock: clock, runner: fr, store: st, dataDir: dataDir, lab: loaded.Labs[0], user: user.ID, events: events}
 }
 
 func (h *harness) next(t *testing.T) Event {
@@ -246,7 +255,7 @@ func TestAbandonEndsRunningAttempt(t *testing.T) {
 	id := h.startRunning(t)
 
 	h.clock.advance(90 * time.Second)
-	view, err := h.Abandon(t.Context(), id)
+	view, err := h.AbandonAsAdmin(t.Context(), id)
 	if err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
@@ -261,7 +270,7 @@ func TestAbandonEndsRunningAttempt(t *testing.T) {
 
 	waitUntil(t, "the sandbox to be destroyed", func() bool { return len(fr.destroys()) == 1 })
 
-	if _, err := h.Abandon(t.Context(), id); !errors.Is(err, ErrTerminal) {
+	if _, err := h.AbandonAsAdmin(t.Context(), id); !errors.Is(err, ErrTerminal) {
 		t.Fatalf("second abandon error = %v, want ErrTerminal", err)
 	}
 	if got := fr.destroys(); len(got) != 1 {
@@ -311,7 +320,7 @@ func TestCurrent(t *testing.T) {
 		t.Fatalf("current = %+v, %v, %v", view, ok, err)
 	}
 
-	if _, err := h.Abandon(t.Context(), id); err != nil {
+	if _, err := h.AbandonAsAdmin(t.Context(), id); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 	if _, ok, err := h.Current(t.Context(), h.user); err != nil || ok {
@@ -373,7 +382,7 @@ func TestTicksStopAtTerminalStatus(t *testing.T) {
 		t.Fatalf("event = %+v, want a second tick", ev)
 	}
 
-	if _, err := h.Abandon(t.Context(), id); err != nil {
+	if _, err := h.AbandonAsAdmin(t.Context(), id); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 	if ev := h.waitForStatus(t, store.StatusAbandoned); ev.AttemptID != id {
@@ -491,7 +500,7 @@ func TestBeforeDestroyHooksRunBeforeDestroy(t *testing.T) {
 			}
 		}},
 		{"abandon", store.StatusAbandoned, func(t *testing.T, h *harness, id string) {
-			if _, err := h.Abandon(t.Context(), id); err != nil {
+			if _, err := h.AbandonAsAdmin(t.Context(), id); err != nil {
 				t.Fatalf("abandon: %v", err)
 			}
 		}},
@@ -560,7 +569,7 @@ func TestBeforeDestroyHookDeadlineDoesNotBlockDestroy(t *testing.T) {
 	})
 
 	id := h.startRunning(t)
-	if _, err := h.Abandon(t.Context(), id); err != nil {
+	if _, err := h.AbandonAsAdmin(t.Context(), id); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 
@@ -581,7 +590,7 @@ func TestBeforeDestroyHookPanicDoesNotBlockDestroy(t *testing.T) {
 	h.OnBeforeDestroy(func(context.Context, View) { ran.Add(1) })
 
 	id := h.startRunning(t)
-	if _, err := h.Abandon(t.Context(), id); err != nil {
+	if _, err := h.AbandonAsAdmin(t.Context(), id); err != nil {
 		t.Fatalf("abandon: %v", err)
 	}
 

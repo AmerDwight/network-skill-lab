@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	IdleTimeout    time.Duration
 	CheckInterval  time.Duration
 	SystemdTimeout time.Duration
+	MaxSandboxes   int
 	LogLevel       slog.Level
 }
 
@@ -39,6 +41,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.SystemdTimeout, err = lookupDuration("NSL_SYSTEMD_TIMEOUT", 60*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.MaxSandboxes, err = lookupInt("NSL_MAX_SANDBOXES", 3); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogLevel, err = lookupLevel("NSL_LOG_LEVEL", slog.LevelInfo); err != nil {
@@ -78,6 +83,21 @@ func lookupDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("parse %s: must be positive, got %q", key, v)
 	}
 	return d, nil
+}
+
+func lookupInt(key string, fallback int) (int, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", key, err)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("parse %s: must be positive, got %q", key, v)
+	}
+	return n, nil
 }
 
 func lookupLevel(key string, fallback slog.Level) (slog.Level, error) {
