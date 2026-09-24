@@ -390,7 +390,7 @@ docs/                   本文件與後續 ADR
 | 0 | spike | 風險驗證（§7） | R1 到 R5 有實測結果 |
 | 1 | 正式 | 核心：all-in-one binary、Docker provider、terminal 多分頁、timer、checker、SQLite、1 個 fixture lab | 能從瀏覽器完整跑完一題 guided 模式。**2026-09-23 完成**，見 `docs/PHASE1-RESULTS.md` |
 | 2 | 正式 | 內容系統：docs 面板、tracks、tutorial / real 模式、params 隨機化、precheck、`content lint` | 不改程式碼就能新增 lab / doc / track；§3.9 每個擴充點至少有一個 fixture lab 覆蓋（net × 3、k3s × 2）。**2026-09-23 完成**，見 `docs/PHASE2-RESULTS.md` |
-| 3 | 正式 | 帳號 admin/user、歷史紀錄頁、錄製回放 | 多帳號可各自練習並回看 |
+| 3 | 正式 | 帳號 admin/user、歷史紀錄頁、錄製回放 | 多帳號可各自練習並回看。**2026-09-24 完成**，見 `docs/PHASE3-RESULTS.md` |
 | 4 | 正式 | 遠端 runner | 成員自架 runner 可接上 |
 | 4 | spike → 正式 | VM provider（libvirt + KVM 巢狀虛擬化、cloud-init 開機時間先驗） | VM 環境的 lab 可跑完 |
 | 5 | 正式 | 面試模式 | 另行設計 |

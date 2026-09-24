@@ -102,3 +102,22 @@ leftover sandboxes of that instance by hand.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Deployment
+
+`nsl serve` speaks plain HTTP. Put it behind a reverse proxy that terminates TLS and forwards `X-Forwarded-Proto: https` (the session cookie is then marked `Secure`) and passes WebSocket upgrades for `/ws/`. Minimal nginx example:
+
+```
+location / {
+    proxy_pass http://127.0.0.1:8081;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+}
+```
+
+First run: create an admin with `nsl user add <name> --role admin`, then sign in. Set `NSL_MAX_SANDBOXES` to what the host can hold (about 30 MB per Ubuntu node, 200 MB per k3s agent, 600 MB per k3s server). One `nsl serve` per data directory; the sandbox host must stay on a trusted network until the remote runner exists (DESIGN.md R6).
