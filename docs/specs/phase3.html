@@ -188,6 +188,9 @@ PATCH /api/admin/users/{id} { "role"? , "disabled"? bool, "password"? } → 200 
 POST /api/admin/attempts/{id}/abandon                    → 200 Attempt
 DELETE /api/admin/attempts/{id}                          → 204（終態才可；刪 DB 列與錄影檔）
 GET  /api/admin/stats                                    → { "sandboxes_active", "sandboxes_max", "recordings_bytes", "attempts": n }
+GET  /api/admin/attempts                                 → [ AdminAttempt ]（進行中的 attempt，全使用者；T4 定稿）
+AdminAttempt = { "id", "lab": LabSummary, "mode", "status", "elapsed_ms", "created_at", "user": { "id", "username" } }
+GET  /api/auth/me 在使用者數為 0 時回 401 { "error": { "code": "no_users", ... } }（登入頁顯示「尚未建立帳號」提示；T4 定稿）
 
 GET  /api/history?user_id=&amp;limit=&amp;before=            → [ HistoryItem ]（user_id 只有 admin 可指定；預設自己；依 created_at 倒序，游標分頁）
 HistoryItem = { "id", "lab": LabSummary, "mode", "status", "elapsed_ms", "submit_count", "command_count",
