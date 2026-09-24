@@ -8,6 +8,7 @@ import {
   getLab,
   listLabs,
   listTopics,
+  runnerBusyOf,
 } from "../api/client";
 import type {
   Attempt,
@@ -15,6 +16,7 @@ import type {
   LabDetail,
   LabMode,
   LabSummary,
+  RunnerBusy,
   TopicNode,
 } from "../api/types";
 import { changeLanguage, currentLanguage } from "../i18n";
@@ -55,6 +57,7 @@ export interface AppState {
   attempt: Attempt | null;
   starting: StartRequest | null;
   attemptError: string | null;
+  runnerBusy: RunnerBusy | null;
   setLanguage: (language: Language) => Promise<void>;
   loadHealth: () => Promise<void>;
   loadTopics: () => Promise<void>;
@@ -73,6 +76,7 @@ export const initialState = {
   attempt: null,
   starting: null,
   attemptError: null,
+  runnerBusy: null as RunnerBusy | null,
 };
 
 export const useAppStore = create<AppState>()((set, get) => ({
@@ -128,12 +132,17 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   startAttempt: async (labId, mode) => {
-    set({ starting: { labId, mode }, attemptError: null });
+    set({ starting: { labId, mode }, attemptError: null, runnerBusy: null });
     try {
       const attempt = await createAttempt(labId, mode);
       set({ attempt, starting: null });
       return attempt;
     } catch (error) {
+      const busy = runnerBusyOf(error);
+      if (busy !== null) {
+        set({ starting: null, runnerBusy: busy });
+        return null;
+      }
       const message = messageOf(error);
       set({ starting: null });
       if (error instanceof ApiError && error.status === 409) {

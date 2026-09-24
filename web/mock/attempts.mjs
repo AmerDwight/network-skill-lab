@@ -117,6 +117,22 @@ export function resultPayload(id) {
   };
 }
 
+export function activeAttempts() {
+  return [...states.values()]
+    .filter(
+      (state) => state.status === "provisioning" || state.status === "running",
+    )
+    .map((state) => ({
+      id: state.id,
+      lab: summary(lab),
+      mode: state.mode,
+      status: state.status,
+      elapsed_ms: Date.now() - state.startedAt,
+      created_at: new Date(state.startedAt).toISOString(),
+      user: state.owner ?? { id: "u-alice", username: "alice" },
+    }));
+}
+
 export function abandonPayload(id) {
   const state = attemptState(id);
   state.status = "abandoned";

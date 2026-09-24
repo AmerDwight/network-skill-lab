@@ -2,11 +2,12 @@ import { useTranslation } from "react-i18next";
 
 import { languages } from "../i18n";
 import { useAppStore } from "../store/app";
+import { useAuthStore } from "../store/auth";
 
 export function LanguageToggle() {
   const { t } = useTranslation();
   const language = useAppStore((state) => state.language);
-  const setLanguage = useAppStore((state) => state.setLanguage);
+  const setLanguage = useAuthStore((state) => state.setLanguage);
 
   return (
     <div className="language-toggle" aria-label={t("language.label")}>

@@ -25,6 +25,7 @@ vi.mock("../api/client", async (importOriginal) => {
     getLab: vi.fn(),
     getCurrentAttempt: vi.fn(),
     createAttempt: vi.fn(),
+    runnerBusyOf: actual.runnerBusyOf,
   };
 });
 
@@ -168,6 +169,25 @@ describe("LabDetailPage", () => {
     expect(startButtonFor("Guided").closest("li")?.className).not.toContain(
       "mode--preselected",
     );
+  });
+
+  it("shows how many sandboxes are in use when the runner is busy", async () => {
+    createAttempt.mockRejectedValue(
+      new client.ApiError(429, "runner_busy", "every sandbox is in use", {
+        sandboxes_active: 3,
+        sandboxes_max: 3,
+      }),
+    );
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Guided" });
+    fireEvent.click(startButtonFor("Guided"));
+
+    expect(
+      await screen.findByText(
+        "3 of 3 sandboxes are running. Try again in a moment.",
+      ),
+    ).toBeDefined();
   });
 
   it("disables every mode while another attempt is running", async () => {

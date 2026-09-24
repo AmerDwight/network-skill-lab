@@ -26,3 +26,14 @@ export function docHref(docId: string): string {
 export function stepHref(step: TrackStep): string {
   return step.kind === "doc" ? docHref(step.ref) : labHref(step.ref, step.mode);
 }
+
+export function loginHref(next: string): string {
+  return `/login?next=${encodeURIComponent(next)}`;
+}
+
+export function safeNext(next: string | null): string {
+  if (next === null || !next.startsWith("/") || next.startsWith("//")) {
+    return "/";
+  }
+  return next;
+}

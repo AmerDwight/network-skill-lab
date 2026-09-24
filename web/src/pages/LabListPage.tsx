@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router";
 
 import type { LabSummary } from "../api/types";
 import { Header } from "../components/Header";
+import { RunnerBusyNotice } from "../components/RunnerBusyNotice";
 import { TopicTree } from "../components/TopicTree";
 import { labHref } from "../lib/paths";
 import { useAppStore } from "../store/app";
@@ -44,6 +45,7 @@ export function LabListPage() {
   const labs = useAppStore((state) => state.labs);
   const attempt = useAppStore((state) => state.attempt);
   const attemptError = useAppStore((state) => state.attemptError);
+  const runnerBusy = useAppStore((state) => state.runnerBusy);
   const loadHealth = useAppStore((state) => state.loadHealth);
   const loadTopics = useAppStore((state) => state.loadTopics);
   const loadLabs = useAppStore((state) => state.loadLabs);
@@ -79,6 +81,8 @@ export function LabListPage() {
             </Link>
           </div>
         ) : null}
+
+        {runnerBusy !== null ? <RunnerBusyNotice busy={runnerBusy} /> : null}
 
         {attemptError ? (
           <div className="banner banner--error">

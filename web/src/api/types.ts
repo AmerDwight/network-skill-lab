@@ -240,3 +240,70 @@ export interface ApiErrorBody {
     message: string;
   };
 }
+
+export type UserRole = "admin" | "user";
+
+export const userRoles: readonly UserRole[] = ["admin", "user"];
+
+export type UserLocale = "zh" | "en";
+
+export interface Me {
+  id: string;
+  username: string;
+  role: UserRole;
+  locale: UserLocale;
+  created_at: string;
+}
+
+export interface AdminUser extends Me {
+  disabled_at: string | null;
+  attempts: number;
+}
+
+export interface AdminStats {
+  sandboxes_active: number;
+  sandboxes_max: number;
+  recordings_bytes: number;
+  attempts: number;
+}
+
+export interface AttemptUser {
+  id: string;
+  username: string;
+}
+
+export interface AdminAttempt {
+  id: string;
+  lab: LabSummary;
+  mode: LabMode;
+  status: AttemptStatus;
+  elapsed_ms: number;
+  created_at: string;
+  user: AttemptUser;
+}
+
+export interface RunnerBusy {
+  sandboxes_active: number;
+  sandboxes_max: number;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface UpdateMeRequest {
+  locale: UserLocale;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface UpdateUserRequest {
+  role?: UserRole;
+  disabled?: boolean;
+  password?: string;
+}
