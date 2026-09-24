@@ -23,7 +23,14 @@ import {
   sessionUser,
   unauthorized,
 } from "./auth.mjs";
-import { docs, health, labs, topics, tracks } from "./fixtures.mjs";
+import { docs, health, labs, summary, topics, tracks } from "./fixtures.mjs";
+import {
+  deleteAttempt,
+  listCommands,
+  listHistory,
+  listRecordings,
+  serveCast,
+} from "./history.mjs";
 
 const port = 18090;
 
@@ -134,6 +141,11 @@ const routes = [
     (match) => ({ body: abandonPayload(decodeURIComponent(match[1])) }),
   ],
   [
+    "DELETE",
+    /^\/api\/admin\/attempts\/([^/]+)$/,
+    (match) => deleteAttempt(decodeURIComponent(match[1])),
+  ],
+  [
     "GET",
     /^\/api\/admin\/stats$/,
     () => ({
@@ -208,6 +220,26 @@ const routes = [
     },
   ],
   ["POST", /^\/api\/progress$/, (match, url, body) => markRead(body)],
+  [
+    "GET",
+    /^\/api\/history$/,
+    (match, url, body, user) => listHistory(user, url),
+  ],
+  [
+    "GET",
+    /^\/api\/attempts\/([^/]+)\/commands$/,
+    (match, url) => listCommands(decodeURIComponent(match[1]), url),
+  ],
+  [
+    "GET",
+    /^\/api\/attempts\/([^/]+)\/recordings$/,
+    (match) => listRecordings(decodeURIComponent(match[1])),
+  ],
+  [
+    "GET",
+    /^\/api\/attempts\/([^/]+)\/recordings\/([^/]+)\/cast$/,
+    () => serveCast(),
+  ],
   ["GET", /^\/api\/attempts\/current$/, () => ({ status: 204 })],
   [
     "POST",
@@ -273,6 +305,15 @@ function reply(response, result) {
   if (result.status === 204) {
     response.writeHead(204, headers);
     response.end();
+    return;
+  }
+  if (result.text !== undefined) {
+    response.writeHead(result.status ?? 200, {
+      ...headers,
+      "Content-Type": result.contentType,
+      "Content-Length": Buffer.byteLength(result.text),
+    });
+    response.end(result.text);
     return;
   }
   response.writeHead(result.status ?? 200, {

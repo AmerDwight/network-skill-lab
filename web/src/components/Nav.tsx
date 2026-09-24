@@ -5,6 +5,7 @@ const links = [
   { to: "/", key: "nav.labs" },
   { to: "/docs", key: "nav.docs" },
   { to: "/tracks", key: "nav.tracks" },
+  { to: "/history", key: "nav.history" },
 ];
 
 export function Nav() {

@@ -7,17 +7,22 @@ import type {
   AdminStats,
   AdminUser,
   Attempt,
+  CommandEntry,
+  CommandsQuery,
   CreateAttemptRequest,
   CreateUserRequest,
   Doc,
   DocSummary,
   Health,
+  HistoryItem,
+  HistoryQuery,
   LabDetail,
   LabMode,
   LabSummary,
   LoginRequest,
   Me,
   ProgressRequest,
+  RecordingInfo,
   Result,
   RunnerBusy,
   SubmitResult,
@@ -58,6 +63,17 @@ export function runnerBusyOf(error: unknown): RunnerBusy | null {
     return null;
   }
   return { sandboxes_active: active, sandboxes_max: max };
+}
+
+function query(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      search.set(key, String(value));
+    }
+  }
+  const text = search.toString();
+  return text === "" ? "" : `?${text}`;
 }
 
 function withLanguage(path: string): string {
@@ -265,4 +281,41 @@ export async function adminAbandon(attemptId: string): Promise<Attempt> {
 
 export async function getAdminStats(): Promise<AdminStats> {
   return json<AdminStats>(await send("/api/admin/stats"));
+}
+
+export async function adminDeleteAttempt(attemptId: string): Promise<void> {
+  await send(`/api/admin/attempts/${encodeURIComponent(attemptId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function listHistory(
+  params: HistoryQuery = {},
+): Promise<HistoryItem[]> {
+  return json<HistoryItem[]>(await send(`/api/history${query(params)}`));
+}
+
+export async function getCommands(
+  attemptId: string,
+  params: CommandsQuery = {},
+): Promise<CommandEntry[]> {
+  return json<CommandEntry[]>(
+    await send(
+      `/api/attempts/${encodeURIComponent(attemptId)}/commands${query(params)}`,
+    ),
+  );
+}
+
+export async function listRecordings(
+  attemptId: string,
+): Promise<RecordingInfo[]> {
+  return json<RecordingInfo[]>(
+    await send(`/api/attempts/${encodeURIComponent(attemptId)}/recordings`),
+  );
+}
+
+export function castUrl(attemptId: string, recordingId: string): string {
+  const attempt = encodeURIComponent(attemptId);
+  const recording = encodeURIComponent(recordingId);
+  return `/api/attempts/${attempt}/recordings/${recording}/cast`;
 }

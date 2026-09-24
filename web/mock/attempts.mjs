@@ -1,7 +1,6 @@
-import { labs } from "./fixtures.mjs";
+import { labs, summary } from "./fixtures.mjs";
 
 const lab = labs[0];
-const summary = ({ nodes, checkpoints, topic_title, ...rest }) => rest;
 
 const ticket = "The server cannot reach the gateway.\nFind out why and fix it.";
 
