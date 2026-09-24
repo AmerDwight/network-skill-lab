@@ -1,0 +1,264 @@
+<title>Phase 3 帳號與歷史</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8;--surface:#ffffff;--ink:#17222b;--muted:#5b6b76;--line:#d9e0e4;
+  --accent:#0f6e6c;--accent-ink:#ffffff;--accent-soft:#dff0ee;
+  --warn-soft:#fbeedb;--warn:#8a5a0b;--pending-soft:#e9e6f7;--pending:#4d3f9e;
+  --code-bg:#eef2f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+    --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+    --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+    --code-bg:#0b1014;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+  --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+  --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+  --code-bg:#0b1014;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;}
+.wrap{max-width:900px;margin:0 auto;padding-block:40px 80px;padding-inline:20px;}
+h1,h2,h3,h4{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:30px;font-weight:700}
+h2{font-size:20px;font-weight:700;margin-top:56px;padding-bottom:8px;border-bottom:2px solid var(--line);display:flex;align-items:baseline;gap:12px}
+h2 .n{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);letter-spacing:.08em}
+h3{font-size:16px;font-weight:700;margin-top:28px}
+h4{font-size:14.5px;font-weight:700;margin-top:18px}
+p{margin:12px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;color:var(--muted);font-size:13px;margin-top:14px}
+.meta b{color:var(--ink);font-weight:500}
+.lede{font-size:16px;color:var(--muted);margin-top:18px;max-width:66ch}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px}
+code{background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;line-height:1.55;margin:12px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+.tbl{overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;background:var(--surface)}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:2px 8px;border-radius:999px;letter-spacing:.04em;vertical-align:middle}
+.tag.risk{background:var(--accent-soft);color:var(--accent)}
+.tag.pending{background:var(--pending-soft);color:var(--pending)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-top:22px}
+.card header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;margin-bottom:6px}
+.card header h3{margin:0}
+.card header .id{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-weight:500}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;margin-top:10px}
+.grid>div>b{display:block;font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;margin-bottom:2px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.decision{border-left:3px solid var(--pending);padding:2px 0 2px 16px;margin:18px 0}
+.decision b.q{display:block}
+.decision .why{color:var(--muted);font-size:14px}
+.callout{background:var(--accent-soft);border-radius:8px;padding:16px 20px;margin:20px 0}
+.callout p{margin:6px 0}
+.approve{margin-top:48px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--surface)}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">network-skill-lab · spec</div>
+<h1>Phase 3 帳號與歷史</h1>
+<div class="meta">
+  <span>類型 <b>正式開發（三層模型）</b></span>
+  <span>版本 <b>v1 草案</b></span>
+  <span>日期 <b>2026-09-24</b></span>
+  <span>撰寫 <b>Fable 5.1（planner）</b></span>
+  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+</div>
+<p class="lede">Phase 2 之後系統只有一個匿名使用者。Phase 3 讓多個人各自登入、各自練習、各自回看：本地帳密、admin 與 user 兩種角色、歷史紀錄頁、指令歷史與 pty 錄影回放。同時把 Phase 2 驗收留下的穩健性問題（啟動 GC、systemd 等待、k3s 路由）一次收掉，因為多人同時使用時這些會從偶發變常態。</p>
+
+<h2><span class="n">01</span>目標與完成定義</h2>
+<ol>
+<li><b>多人各自練習。</b>兩個帳號同時登入（兩個瀏覽器），各自開一題，兩個沙箱並存互不干擾，彼此看不到對方的 attempt、歷史與進度。</li>
+<li><b>未登入一律拒絕。</b>所有 <code>/api</code> 與 <code>/ws</code> 對未登入回 401；登入後 session 7 天滑動有效；登出即失效。</li>
+<li><b>admin 管帳號。</b>admin 頁能建立使用者、重設密碼、停用、改角色；被停用者立刻登不進來，現有 session 也失效。</li>
+<li><b>歷史可回看。</b>歷史頁列出自己的每個 attempt（lab、模式、狀態、時間、提交次數）；詳情頁有結果、指令歷史（時間、節點、指令、exit code）、每個 terminal 分頁的錄影，可播放、暫停、拖曳。</li>
+<li><b>admin 看得到所有人。</b>admin 的歷史頁可切換使用者，看任何人的詳情與回放。</li>
+<li><b>併發有上限。</b>同時沙箱數達到 <code>NSL_MAX_SANDBOXES</code> 時，第 N+1 個開題得到明確訊息（誰在用、幾個），不會排隊也不會掛住。</li>
+<li><b>穩健性。</b>#56、#57 修好：伺服器啟動時 GC 只清自己的資源且不致命；systemd 等待放寬並回報狀態。Phase 1、2 的驗收條目與 <code>make test-content</code> 全部維持通過。</li>
+</ol>
+
+<h2><span class="n">02</span>範圍</h2>
+<div class="tbl"><table>
+<tr><th>在範圍內</th><th>不在範圍內</th></tr>
+<tr><td>
+<ul>
+<li>帳號：本地帳密、argon2id、sessions 表、cookie session、登入登出、admin / user 角色（§05）</li>
+<li>CLI：<code>nsl user add | passwd | disable | list</code>；首個 admin 的建立方式（§05）</li>
+<li>API 認證中介層、admin 端點、歷史與回放端點、併發上限（§06）</li>
+<li>Web：登入頁、頁首使用者與登出、admin 頁、歷史列表與詳情、asciicast 播放器（§07）</li>
+<li>穩健性：#56、#57、#48、#50、#54（§08）</li>
+<li>資料模型：migration 0003（§09）</li>
+</ul>
+</td><td>
+<ul>
+<li>OAuth / LDAP / SSO、email、自助註冊、忘記密碼 → 不做（D6）</li>
+<li>面試模式：時限、即時觀看、成績頁 → Phase 5</li>
+<li>HTTPS 終結、反向代理設定 → 部署文件一段即可</li>
+<li>遠端 runner、VM provider → Phase 4</li>
+<li>錄影檔清理策略、配額 → 記為 Phase 4 前置</li>
+<li>即時觀看他人 terminal → Phase 5</li>
+</ul>
+</td></tr>
+</table></div>
+
+<h2><span class="n">03</span>待批的提案</h2>
+<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+
+<div class="decision"><b class="q">P1 密碼 argon2id，session 存 DB、HttpOnly + SameSite=Lax cookie、7 天滑動</b>
+參數 time=1、memory=64 MB、threads=4（<code>golang.org/x/crypto/argon2</code>）。session id 32 bytes 隨機，cookie 名 <code>nsl_session</code>；每次請求更新 <code>last_seen_at</code>，超過 7 天未用即失效；登出刪 row。無 remember-me、無 CSRF token（SameSite=Lax + 只用 JSON body 的 POST 已足夠，並拒絕非 JSON content-type 的寫入請求）。
+<div class="why">理由：D6 要簡單；DB session 讓「停用即失效」與「登出所有裝置」不用額外機制。</div></div>
+
+<div class="decision"><b class="q">P2 首個 admin 由 CLI 建立：<code>nsl user add &lt;name&gt; --role admin</code>（互動輸入密碼或 <code>--password-stdin</code>）</b>
+<code>nsl serve</code> 在使用者數為 0 時照常啟動但登入頁顯示「尚未建立帳號，請在伺服器執行 nsl user add」。不用環境變數塞密碼。
+<div class="why">理由：密碼不進 env 與 log；CLI 與 serve 共用 store，最少程式碼。</div></div>
+
+<div class="decision"><b class="q">P3 既有的 <code>local</code> 使用者在 migration 0003 標為停用，資料保留</b>
+它的 attempt、進度、錄影仍在，admin 的歷史頁可看到（顯示為 local）。
+<div class="why">理由：不刪資料；沒有人需要以 local 登入。</div></div>
+
+<div class="decision"><b class="q">P4 併發上限以「沙箱數」計，<code>NSL_MAX_SANDBOXES</code> 預設 3；超過回 <code>429 runner_busy</code>，不排隊</b>
+回應含目前使用中的沙箱數與上限；UI 顯示「目前 3 個沙箱使用中，請稍後再試」。admin 不豁免。
+<div class="why">理由：5.8 GB 主機跑 3 個沙箱（含一個 k3s 雙節點）約 2.5 GB，是安全線；排隊會引出等待時間與逾時語意，留給 Phase 4。</div></div>
+
+<div class="decision"><b class="q">P5 回放用 <code>asciinema-player</code> npm 套件打包進前端，錄影檔經認證端點以 JSON 串流</b>
+播放器讀 <code>GET /api/attempts/{id}/recordings/{rid}/cast</code>（asciicast v2 原文），支援播放、暫停、進度拖曳、速度 1x/2x/4x；idle time limit 2 秒（長時間沒輸出自動跳過）。
+<div class="why">理由：D14 只要求錄影先落地，回放 UI 現在做；官方播放器最省事，套件約 300 kB，接受。</div></div>
+
+<div class="decision"><b class="q">P6 admin 可看所有人的歷史與回放，但不能看進行中的 terminal</b>
+歷史頁的使用者切換只給 admin；進行中的 attempt 在列表顯示狀態但詳情頁只在終態後可開。
+<div class="why">理由：即時觀看是面試功能（Phase 5），牽涉 pty 分流；Phase 3 只做「事後」。</div></div>
+
+<div class="decision"><b class="q">P7 進行中 attempt 的所有權：只有本人能連 events / terminal、放棄、提交；admin 只能「強制放棄」</b>
+新增 <code>POST /api/admin/attempts/{id}/abandon</code>，用於清掉卡住的沙箱。
+<div class="why">理由：多人共用主機時，admin 需要回收工具，但不該進別人的 terminal。</div></div>
+
+<div class="decision"><b class="q">P8 GC 依 instance 標籤限定（#57）：每個 nsl 行程用 <code>nsl.instance=&lt;NSL_INSTANCE 或資料目錄路徑的 hash&gt;</code>，只清自己的；測試套件用隨機 instance</b>
+啟動 GC 先刪容器再刪網路，網路「仍有 endpoint」錯誤重試 5 次後只記 log 不退出。
+<div class="why">理由：Phase 2 驗收時驗收伺服器與整合測試互相清掉對方的沙箱，也讓 serve 直接退出。</div></div>
+
+<div class="decision"><b class="q">P9 systemd 等待上限 60 秒（#56），失敗訊息帶最後狀態與 <code>systemctl list-jobs</code>；provisioning 事件不變</b>
+<div class="why">理由：多人同時開題時主機負載會高，30 秒太緊；60 秒仍在 UI 可接受範圍。</div></div>
+
+<div class="decision"><b class="q">P10 錄影與指令歷史的保留：Phase 3 不自動清理，admin 頁顯示磁碟用量與每個 attempt 的錄影大小，可手動刪除 attempt（含檔案）</b>
+<div class="why">理由：配額與策略需要真實使用數據，先給工具。</div></div>
+
+<h2><span class="n">04</span>架構變更</h2>
+<pre><code>internal/
+  auth/         密碼雜湊、session 建立與驗證、中介層（從 cookie 取 user，注入 context）
+  store/        + sessions 表；users 加 disabled_at；migration 0003；CommandLog / Recordings 查詢端點用的方法
+  api/          + /api/auth/*、/api/admin/*、/api/history/*、recordings 串流；所有既有端點改用 context 內的 user；併發上限
+  attempt/      + 依 user 的所有權檢查；沙箱計數；admin 強制放棄
+  provider/docker/  + instance 標籤、GC 重試、systemd 60 s
+cmd/nsl/        + `user add | passwd | disable | list`
+web/            + 登入頁、AuthGate、頁首、admin 頁、歷史列表與詳情、播放器</code></pre>
+<p>依賴方向不變；<code>auth</code> 只依賴 <code>store</code>。前端所有頁面包在 <code>AuthGate</code> 內，未登入導向 <code>/login</code>。</p>
+
+<h2><span class="n">05</span>帳號與 session</h2>
+<ul>
+<li>使用者名稱：3 到 32 字元，<code>[a-z0-9_-]</code>，唯一；密碼至少 8 字元，不做其他規則。</li>
+<li>角色 <code>admin | user</code>；admin 不能停用或降級自己（避免鎖死）。</li>
+<li>登入失敗回 401 <code>invalid_credentials</code>，不區分帳號不存在與密碼錯；同一 IP 連續失敗 10 次後 60 秒內回 429 <code>too_many_attempts</code>（記憶體內計數即可）。</li>
+<li>CLI：<code>nsl user add &lt;name&gt; [--role admin|user]</code>（密碼從 tty 或 <code>--password-stdin</code>）、<code>nsl user passwd &lt;name&gt;</code>、<code>nsl user disable|enable &lt;name&gt;</code>、<code>nsl user list</code>。CLI 直接開 store（伺服器可同時在跑，SQLite WAL 允許）。</li>
+<li>locale：使用者的 <code>locale</code> 欄位在登入時作為 UI 預設語言，前端切換時回寫（<code>PATCH /api/auth/me</code>）。</li>
+</ul>
+
+<h2><span class="n">06</span>API</h2>
+<p>所有既有端點加上認證；<code>local</code> 使用者的硬編碼全部改為 context 內的 user。錯誤格式不變。</p>
+<pre><code>POST /api/auth/login   { "username", "password" }      → 200 Me | 401 invalid_credentials | 429 too_many_attempts | 403 user_disabled
+POST /api/auth/logout                                    → 204
+GET  /api/auth/me                                        → 200 Me | 401
+PATCH /api/auth/me     { "locale": "zh"|"en" }           → 200 Me
+Me = { "id", "username", "role", "locale", "created_at" }
+
+GET  /api/admin/users                                    → [ User ]   User = Me + { "disabled_at": null|time, "attempts": n }
+POST /api/admin/users  { "username", "password", "role" } → 201 User | 409 username_taken
+PATCH /api/admin/users/{id} { "role"? , "disabled"? bool, "password"? } → 200 User | 400 cannot_modify_self
+POST /api/admin/attempts/{id}/abandon                    → 200 Attempt
+DELETE /api/admin/attempts/{id}                          → 204（終態才可；刪 DB 列與錄影檔）
+GET  /api/admin/stats                                    → { "sandboxes_active", "sandboxes_max", "recordings_bytes", "attempts": n }
+
+GET  /api/history?user_id=&amp;limit=&amp;before=            → [ HistoryItem ]（user_id 只有 admin 可指定；預設自己；依 created_at 倒序，游標分頁）
+HistoryItem = { "id", "lab": LabSummary, "mode", "status", "elapsed_ms", "submit_count", "command_count",
+                "created_at", "ended_at", "user": { "id", "username" } }
+GET  /api/attempts/{id}/commands?limit=500&amp;after=       → [{ "id", "node", "ts", "user", "cwd", "command", "exit_code" }]
+GET  /api/attempts/{id}/recordings                       → [{ "id", "node", "tab", "started_at", "ended_at", "bytes" }]
+GET  /api/attempts/{id}/recordings/{rid}/cast            → text/plain asciicast v2 原文（Content-Length，支援 Range 不必要）
+
+POST /api/attempts                                       → 429 runner_busy { "error": { ..., "message" }, "sandboxes_active", "sandboxes_max" }
+所有 /api/attempts/{id}* 與 /ws/attempts/{id}*：非本人 → 404 not_found（不洩漏存在性）；admin 對終態 attempt 的 GET 類端點放行。</code></pre>
+
+<h2><span class="n">07</span>Web</h2>
+<div class="tbl"><table>
+<tr><th>頁面</th><th>內容</th></tr>
+<tr><td><code>/login</code></td><td>帳號密碼表單、錯誤訊息、語言切換；成功後回到原本要去的路徑</td></tr>
+<tr><td>頁首</td><td>使用者名稱、角色徽章、登出；admin 多一個「管理」連結</td></tr>
+<tr><td><code>/admin</code></td><td>使用者表（名稱、角色、建立日、attempt 數、停用狀態）、建立使用者表單、每列的重設密碼 / 停用 / 改角色；統計列（沙箱使用 n/m、錄影總大小）；進行中 attempt 清單與「強制放棄」</td></tr>
+<tr><td><code>/history</code></td><td>自己的 attempt 列表（lab、模式、狀態徽章、時間、耗時、提交次數），無限捲動；admin 有使用者下拉</td></tr>
+<tr><td><code>/history/{id}</code></td><td>三個分頁：結果（沿用結果頁元件）、指令（表格，可依節點篩選）、錄影（每個分頁一個播放器，asciinema-player）；admin 多「刪除」</td></tr>
+<tr><td>Lab 列表與詳情</td><td>開題遇到 429 顯示沙箱使用量與提示</td></tr>
+</table></div>
+<ul>
+<li>AuthGate：app 啟動先打 <code>/api/auth/me</code>；401 導向登入；任何 API 回 401 時清 session 狀態並導向登入。</li>
+<li>WS 的 401 在 upgrade 前回 JSON；前端把 events socket 的 401 關閉碼視為登出。</li>
+<li>i18n 全部雙語；locale 與帳號同步。</li>
+</ul>
+
+<h2><span class="n">08</span>穩健性項目</h2>
+<div class="tbl"><table>
+<tr><th>Issue</th><th>做法</th></tr>
+<tr><td>#57 啟動 GC</td><td>P8。另加 <code>nsl gc</code> 子指令手動清本 instance 的殘留。</td></tr>
+<tr><td>#56 systemd 等待</td><td>P9。</td></tr>
+<tr><td>#48 k3s 測試 flake</td><td>check 在修復前必須看到 CrashLoopBackOff 或 restartCount ≥ 1 才算「壞掉」。</td></tr>
+<tr><td>#50 service CIDR 路由</td><td>bootstrap 對 k3s role 加 <code>10.42.0.0/16</code> 與 <code>10.43.0.0/16</code> 經 flannel 的路由（從 k3s 設定讀值），k3s-svc-01 移除 workaround。</td></tr>
+<tr><td>#54 lint 訊息</td><td>交叉驗證對所有解析成功的 lab 執行；只有目錄不存在才報 does not exist。</td></tr>
+<tr><td>#59 inotify</td><td>README 加一段；serve 啟動時若 <code>fs.inotify.max_user_instances</code> &lt; 512 記 warn。</td></tr>
+</table></div>
+
+<h2><span class="n">09</span>資料模型</h2>
+<ul>
+<li>migration 0003：<code>users</code> 加 <code>disabled_at TEXT</code>、<code>updated_at</code>；<code>sessions(id TEXT PK, user_id FK CASCADE, created_at, last_seen_at, expires_at, user_agent)</code> 與 <code>(user_id)</code> 索引；<code>UPDATE users SET disabled_at = now WHERE username = 'local'</code>。</li>
+<li><code>recordings</code> 加 <code>bytes INTEGER</code>（Close 時寫入）。</li>
+<li>attempts 不變；查詢加 <code>ListByUser(userID, before, limit)</code> 與 <code>CountActiveSandboxes()</code>（provisioning|running）。</li>
+</ul>
+
+<h2><span class="n">10</span>Task 拆分</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>Task</th><th>驗收</th></tr>
+<tr><td>T1</td><td>穩健性：#57 instance 標籤與 GC 重試、<code>nsl gc</code>、#56、#48、#50、#54、#59 警告</td><td>整合測試：兩個 instance 的資源互不 GC；啟動時殘留網路不致命；content 套件全綠</td></tr>
+<tr><td>T2</td><td>store + auth：migration 0003、argon2id、sessions、CLI user 子指令</td><td>單元測試；CLI 手動建帳號、改密碼、停用</td></tr>
+<tr><td>T3</td><td>API：認證中介層、auth / admin / history / commands / recordings 端點、所有權檢查、429 上限、admin 強制放棄與刪除</td><td>httptest 覆蓋每個端點的 401 / 403 / 404 / 429；e2e：兩個使用者同時各跑一題</td></tr>
+<tr><td>T4</td><td>Web：登入、AuthGate、頁首、admin 頁、429 提示</td><td>vitest；mock 擴充</td></tr>
+<tr><td>T5</td><td>Web：歷史列表、詳情三分頁、asciinema-player、admin 使用者切換與刪除</td><td>vitest；用真實 .cast 檔驗播放器載入</td></tr>
+<tr><td>T6</td><td>驗收：§01 七條；PHASE3-RESULTS.md；部署一段（反向代理 + HTTPS）寫進 README</td><td>§01 全部成立</td></tr>
+</table></div>
+<p>T1、T2 平行；T3 等 T2；T4 依契約可與 T3 平行；T5 等 T3 的 cast 端點形狀（已在 §06 定稿，可依契約先做）。</p>
+
+<h2><span class="n">11</span>風險</h2>
+<ul>
+<li><b>認證改動面大</b>：所有端點與 WS 都要過中介層，測試 harness 要帶 session。T3 是最大 task，必要時拆成「中介層 + auth」與「history / admin」兩個 PR。</li>
+<li><b>兩個沙箱並存的資源</b>：兩個 k3s 雙節點同時跑約 2.2 GB，加上主機其它負載可能觸發 #59 類的問題；T1 的 inotify 警告與 P4 的上限是防線。</li>
+<li><b>asciinema-player 與 Vite</b>：套件是 ESM，理論上直接可用；若 CSS 或 worker 打包有問題，退路是把播放器獨立成 lazy chunk。</li>
+<li><b>驗收需要兩個瀏覽器</b>：API 層可用兩個 cookie jar 模擬；視覺確認再請你用無痕視窗開第二個帳號。</li>
+</ul>
+
+<div class="approve">
+<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
+<ol>
+<li>P1 到 P10 有沒有要改的？特別是 P4 的上限預設 3 與 P6 的 admin 權限範圍。</li>
+<li>§02 的範圍：忘記密碼、自助註冊確定不做？</li>
+<li>批准後我開 issue，T1、T2 平行開工。</li>
+</ol>
+</div>
+</div>
