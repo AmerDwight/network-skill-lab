@@ -3,10 +3,11 @@ package docker
 import "github.com/docker/docker/api/types/filters"
 
 const (
-	labelManaged = "nsl.managed"
-	labelAttempt = "nsl.attempt"
-	labelNode    = "nsl.node"
-	labelRole    = "nsl.role"
+	labelManaged  = "nsl.managed"
+	labelInstance = "nsl.instance"
+	labelAttempt  = "nsl.attempt"
+	labelNode     = "nsl.node"
+	labelRole     = "nsl.role"
 
 	namePrefix  = "nsl-"
 	mgmtSuffix  = "-mgmt"
@@ -25,12 +26,12 @@ func linkNetworkName(attempt, link string) string {
 	return namePrefix + attempt + "-" + link
 }
 
-func attemptLabels(attempt string) map[string]string {
-	return map[string]string{labelManaged: "true", labelAttempt: attempt}
+func attemptLabels(instance, attempt string) map[string]string {
+	return map[string]string{labelManaged: "true", labelInstance: instance, labelAttempt: attempt}
 }
 
-func nodeLabels(attempt, node, role string) map[string]string {
-	labels := attemptLabels(attempt)
+func nodeLabels(instance, attempt, node, role string) map[string]string {
+	labels := attemptLabels(instance, attempt)
 	labels[labelNode] = node
 	labels[labelRole] = role
 	return labels
@@ -40,6 +41,9 @@ func attemptFilter(attempt string) filters.Args {
 	return filters.NewArgs(filters.Arg(labelFilter, labelAttempt+"="+attempt))
 }
 
-func managedFilter() filters.Args {
-	return filters.NewArgs(filters.Arg(labelFilter, labelManaged+"=true"))
+func instanceFilter(instance string) filters.Args {
+	return filters.NewArgs(
+		filters.Arg(labelFilter, labelManaged+"=true"),
+		filters.Arg(labelFilter, labelInstance+"="+instance),
+	)
 }

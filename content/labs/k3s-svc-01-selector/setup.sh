@@ -5,10 +5,6 @@ if [ "$NSL_NODE" != k3s01 ]; then
 	exit 0
 fi
 
-# internet: false leaves the node without a default route, so the cluster
-# service CIDR has nowhere to go until it is routed at the lab link.
-ip route replace "$NSL_SERVICE_CIDR" dev eth1
-
 selector="$NSL_APP-web"
 target_port="$NSL_PORT"
 if [ "${NSL_SVC_TARGET_OFF:-}" = "1" ]; then

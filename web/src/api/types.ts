@@ -3,6 +3,7 @@ export interface Health {
   docker: boolean;
   image: boolean;
   image_name: string;
+  instance: string;
   mem_available_mb: number;
   error: string;
 }

@@ -205,12 +205,38 @@ func TestValidateRefsDuplicateDocID(t *testing.T) {
 		{ID: "net/ip/guide", Topic: "net/ip", Paths: map[string]string{"zh": "b.zh.md"}},
 	}}
 
-	errs := validateRefs(all)
+	errs := validateRefs(all, "")
 	found := false
 	for _, err := range errs {
 		found = found || strings.Contains(err.Error(), `id: duplicate doc id "net/ip/guide"`)
 	}
 	if !found {
 		t.Errorf("validateRefs() = %v, want a duplicate doc id error", errs)
+	}
+}
+
+func TestLoadAllChecksCrossReferencesOfLabsThatOtherRulesRejected(t *testing.T) {
+	const brokenDir = "labs/net-ip-02-broken/"
+	files := baseFiles()
+	files[labDir+"lab.yaml"] = strings.Replace(validLabYAML, "topic: net/ip", "topic: net/nope", 1)
+	files[brokenDir+"lab.yaml"] = strings.Replace(
+		strings.Replace(validLabYAML, "id: net-ip-01-link-down", "id: net-ip-02-broken", 1),
+		"version: 1", "version: 2", 1)
+	files[brokenDir+"topology.yaml"] = validTopologyYAML
+	files[brokenDir+"setup.sh"] = "#!/usr/bin/env bash\n"
+	files[brokenDir+"checks/01-link-up.sh"] = "#!/usr/bin/env bash\n"
+	files[brokenDir+"checks/02-ping-peer.sh"] = "#!/usr/bin/env bash\n"
+	files[brokenDir+"solution.zh.md"] = "zh\n"
+	files[brokenDir+"solution.en.md"] = "en\n"
+
+	_, err := LoadAll(writeTree(t, files))
+	if err == nil {
+		t.Fatal("LoadAll() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), `topic: "net/nope" is not in topics.yaml`) {
+		t.Errorf("LoadAll() error = %q, want the topic error of the lab that failed another rule", err)
+	}
+	if strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("LoadAll() error = %q, want no cascading \"does not exist\" for a lab that has a directory", err)
 	}
 }

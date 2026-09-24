@@ -27,7 +27,24 @@ const (
 	fixtureID = "net-ip-01-link-down"
 )
 
+// testInstance keeps a test binary from collecting the sandboxes of a running
+// server, or of another test binary, on the same daemon.
+var testInstance = "test-" + randomSuffix()
+
+func randomSuffix() string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
 func newProvider(t *testing.T) (*Provider, client.APIClient) {
+	t.Helper()
+	return newProviderFor(t, testInstance)
+}
+
+func newProviderFor(t *testing.T, instance string) (*Provider, client.APIClient) {
 	t.Helper()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -38,16 +55,12 @@ func newProvider(t *testing.T) (*Provider, client.APIClient) {
 	if _, err := cli.Ping(ctx); err != nil {
 		t.Skipf("docker daemon unreachable: %v", err)
 	}
-	return New(cli, Options{Image: testImage}), cli
+	return New(cli, Options{Image: testImage, Instance: instance}), cli
 }
 
 func attemptID(t *testing.T) string {
 	t.Helper()
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		t.Fatalf("random attempt id: %v", err)
-	}
-	return "t4" + hex.EncodeToString(b)
+	return "t4" + randomSuffix()
 }
 
 func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
@@ -127,7 +140,8 @@ func TestSandboxLifecycle(t *testing.T) {
 		t.Fatalf("got %d containers, want 2", len(containers))
 	}
 	for _, c := range containers {
-		if c.Labels[labelManaged] != "true" || c.Labels[labelAttempt] != attempt || c.Labels[labelNode] == "" {
+		if c.Labels[labelManaged] != "true" || c.Labels[labelInstance] != testInstance ||
+			c.Labels[labelAttempt] != attempt || c.Labels[labelNode] == "" {
 			t.Errorf("container %s labels = %v", c.ID, c.Labels)
 		}
 	}
@@ -314,23 +328,84 @@ func pingExitCode(t *testing.T, p *Provider, sb runner.SandboxID, node, iface, t
 	return result.ExitCode
 }
 
-func TestGC(t *testing.T) {
-	p, cli := newProvider(t)
-	attempt := attemptID(t)
-	labels := attemptLabels(attempt)
-
+func createStray(t *testing.T, cli client.APIClient, instance, attempt string) {
+	t.Helper()
+	labels := attemptLabels(instance, attempt)
 	if _, err := cli.NetworkCreate(t.Context(), mgmtNetworkName(attempt), network.CreateOptions{Labels: labels}); err != nil {
 		t.Fatalf("create stray network: %v", err)
 	}
 	created, err := cli.ContainerCreate(t.Context(),
-		&container.Config{Image: testImage, Labels: nodeLabels(attempt, "stray", "ubuntu")},
+		&container.Config{Image: testImage, Labels: nodeLabels(instance, attempt, "stray", "ubuntu")},
 		&container.HostConfig{}, nil, nil, containerName(attempt, "stray"))
 	if err != nil {
 		t.Fatalf("create stray container: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = cli.ContainerRemove(context.WithoutCancel(t.Context()), created.ID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+		ctx := context.WithoutCancel(t.Context())
+		_ = cli.ContainerRemove(ctx, created.ID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+		_ = cli.NetworkRemove(ctx, mgmtNetworkName(attempt))
 	})
+}
+
+func TestGC(t *testing.T) {
+	p, cli := newProvider(t)
+	attempt := attemptID(t)
+	createStray(t, cli, testInstance, attempt)
+
+	if err := p.GC(t.Context()); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	assertNothingLeft(t, cli, attemptFilter(attempt))
+}
+
+func TestGCLeavesOtherInstancesAlone(t *testing.T) {
+	mine, cli := newProviderFor(t, testInstance+"-a")
+	myAttempt, theirAttempt := attemptID(t), attemptID(t)
+	createStray(t, cli, testInstance+"-a", myAttempt)
+	createStray(t, cli, testInstance+"-b", theirAttempt)
+
+	if err := mine.GC(t.Context()); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	assertNothingLeft(t, cli, attemptFilter(myAttempt))
+
+	containers, err := cli.ContainerList(t.Context(), container.ListOptions{All: true, Filters: attemptFilter(theirAttempt)})
+	if err != nil {
+		t.Fatalf("list containers: %v", err)
+	}
+	if len(containers) != 1 {
+		t.Errorf("the other instance has %d containers, want 1", len(containers))
+	}
+	networks, err := cli.NetworkList(t.Context(), network.ListOptions{Filters: attemptFilter(theirAttempt)})
+	if err != nil {
+		t.Fatalf("list networks: %v", err)
+	}
+	if len(networks) != 1 {
+		t.Errorf("the other instance has %d networks, want 1", len(networks))
+	}
+
+	theirs, _ := newProviderFor(t, testInstance+"-b")
+	if err := theirs.GC(t.Context()); err != nil {
+		t.Fatalf("gc of the other instance: %v", err)
+	}
+	assertNothingLeft(t, cli, attemptFilter(theirAttempt))
+}
+
+// A network whose containers are still being detached is the startup case of #57:
+// GC must report it, and nsl serve must keep running.
+func TestGCSurvivesANetworkThatStillHasEndpoints(t *testing.T) {
+	p, cli := newProvider(t)
+	attempt := attemptID(t)
+	spec := fixtureSpec(t, attempt)
+	spec.Setup = runner.Script{}
+	t.Cleanup(func() {
+		if err := p.Destroy(context.WithoutCancel(t.Context()), runner.SandboxID(attempt)); err != nil {
+			t.Errorf("cleanup: %v", err)
+		}
+	})
+	if _, err := p.Provision(t.Context(), spec); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
 
 	if err := p.GC(t.Context()); err != nil {
 		t.Fatalf("gc: %v", err)

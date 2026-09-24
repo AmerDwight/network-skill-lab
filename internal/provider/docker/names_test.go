@@ -21,16 +21,17 @@ func TestNames(t *testing.T) {
 }
 
 func TestLabels(t *testing.T) {
-	attempt := attemptLabels("att1")
-	if attempt[labelManaged] != "true" || attempt[labelAttempt] != "att1" {
+	attempt := attemptLabels("inst1", "att1")
+	if attempt[labelManaged] != "true" || attempt[labelInstance] != "inst1" || attempt[labelAttempt] != "att1" {
 		t.Errorf("attemptLabels = %v", attempt)
 	}
 	if _, ok := attempt[labelNode]; ok {
 		t.Errorf("attemptLabels must not carry a node label: %v", attempt)
 	}
 
-	node := nodeLabels("att1", "web01", "ubuntu")
-	if node[labelManaged] != "true" || node[labelAttempt] != "att1" || node[labelNode] != "web01" || node[labelRole] != "ubuntu" {
+	node := nodeLabels("inst1", "att1", "web01", "ubuntu")
+	if node[labelManaged] != "true" || node[labelInstance] != "inst1" || node[labelAttempt] != "att1" ||
+		node[labelNode] != "web01" || node[labelRole] != "ubuntu" {
 		t.Errorf("nodeLabels = %v", node)
 	}
 }
@@ -39,8 +40,10 @@ func TestFilters(t *testing.T) {
 	if got := attemptFilter("att1").Get(labelFilter); !slices.Equal(got, []string{"nsl.attempt=att1"}) {
 		t.Errorf("attemptFilter = %v", got)
 	}
-	if got := managedFilter().Get(labelFilter); !slices.Equal(got, []string{"nsl.managed=true"}) {
-		t.Errorf("managedFilter = %v", got)
+	got := instanceFilter("inst1").Get(labelFilter)
+	slices.Sort(got)
+	if want := []string{"nsl.instance=inst1", "nsl.managed=true"}; !slices.Equal(got, want) {
+		t.Errorf("instanceFilter = %v, want %v", got, want)
 	}
 }
 

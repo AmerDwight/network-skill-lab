@@ -54,14 +54,14 @@ func LoadAll(dir string) (*Content, error) {
 		errs = append(errs, fmt.Errorf("%s: topics: file is required when the content directory has labs or docs", filepath.Join(dir, "topics.yaml")))
 	}
 
-	errs = append(errs, validateRefs(&all)...)
+	errs = append(errs, validateRefs(&all, dir)...)
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
 	return &all, nil
 }
 
-func validateRefs(all *Content) []error {
+func validateRefs(all *Content, dir string) []error {
 	var errs []error
 
 	docs := map[string]Doc{}
@@ -104,7 +104,9 @@ func validateRefs(all *Content) []error {
 			}
 			lab, ok := labs[step.Lab]
 			if !ok {
-				errs = append(errs, fmt.Errorf("%s: %s: lab %q does not exist", track.Path, field, step.Lab))
+				if !labDirExists(dir, step.Lab) {
+					errs = append(errs, fmt.Errorf("%s: %s: lab %q does not exist", track.Path, field, step.Lab))
+				}
 				continue
 			}
 			if step.Mode != "" && !slices.Contains(lab.Modes, step.Mode) {
@@ -114,4 +116,14 @@ func validateRefs(all *Content) []error {
 	}
 
 	return errs
+}
+
+// labDirExists keeps a lab whose YAML could not be parsed from turning every track
+// step that references it into a second, misleading "does not exist" error.
+func labDirExists(dir, id string) bool {
+	if dir == "" || id == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, "labs", id))
+	return err == nil && info.IsDir()
 }

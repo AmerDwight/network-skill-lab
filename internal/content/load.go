@@ -34,10 +34,7 @@ func Load(dir string) ([]Lab, error) {
 		errs = append(errs, validate(lab)...)
 		labs = append(labs, *lab)
 	}
-	if err := errors.Join(errs...); err != nil {
-		return nil, err
-	}
-	return labs, nil
+	return labs, errors.Join(errs...)
 }
 
 func loadLab(dir string) (*Lab, error) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -166,13 +167,11 @@ func TestK3sSandbox(t *testing.T) {
 		t.Errorf("traefik is deployed although the default disable list should have dropped it: %s", traefik.Stdout)
 	}
 
-	pods := waitForPods(t, p, sb, "CrashLoopBackOff", "Error")
-	if !strings.Contains(pods, "broken") {
-		t.Fatalf("kubectl get pods = %q, want a crashlooping broken pod", pods)
-	}
+	pods := waitForCrashLoop(t, p, sb)
+	t.Logf("broken pod is failing: %s", strings.TrimSpace(pods))
 
 	if code := runCheck(t, p, sb, spec, check); code == 0 {
-		t.Error("check passed before the deployment was fixed")
+		t.Error("check passed although the pod of broken is crashlooping")
 	}
 
 	mustExec(t, p, sb, "k3s01", "kubectl", "-n", "nsl", "patch", "deploy", "broken", "--type=json",
@@ -211,22 +210,43 @@ func runCheck(t *testing.T, p *Provider, sb runner.SandboxID, spec runner.Sandbo
 	return result.ExitCode
 }
 
-func waitForPods(t *testing.T, p *Provider, sb runner.SandboxID, states ...string) string {
+const podStatusTemplate = `{range .items[*]}{.metadata.name} ` +
+	`{.status.containerStatuses[*].state.waiting.reason} ` +
+	`{.status.containerStatuses[*].restartCount}{"\n"}{end}`
+
+// waitForCrashLoop waits for evidence that the deployment is really broken, so that a
+// check failing at an arbitrary moment of the initial rollout cannot pass for it (#48).
+func waitForCrashLoop(t *testing.T, p *Provider, sb runner.SandboxID) string {
 	t.Helper()
 	var out string
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		out = string(mustExec(t, p, sb, "k3s01", "kubectl", "-n", "nsl", "get", "pods", "--no-headers").Stdout)
-		for _, state := range states {
-			if strings.Contains(out, state) {
-				return out
-			}
+		out = string(mustExec(t, p, sb, "k3s01", "kubectl", "-n", "nsl", "get", "pods",
+			"-o", "jsonpath="+podStatusTemplate).Stdout)
+		if crashLooping(out) {
+			return out
 		}
 		if time.Now().After(deadline) {
-			return out
+			t.Fatalf("no pod of broken reached CrashLoopBackOff or restarted within 60s:\n%s", out)
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+func crashLooping(status string) bool {
+	for line := range strings.Lines(status) {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || !strings.HasPrefix(fields[0], "broken-") {
+			continue
+		}
+		if slices.Contains(fields[1:], "CrashLoopBackOff") {
+			return true
+		}
+		if restarts, err := strconv.Atoi(fields[len(fields)-1]); err == nil && restarts >= 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func k3sVolume(t *testing.T, cli client.APIClient, attempt string) string {

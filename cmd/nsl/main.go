@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,7 +30,11 @@ import (
 
 var version = "dev"
 
-const shutdownTimeout = 10 * time.Second
+const (
+	shutdownTimeout      = 10 * time.Second
+	inotifyInstancesPath = "/proc/sys/fs/inotify/max_user_instances"
+	minInotifyInstances  = 512
+)
 
 var errFindings = errors.New("content has errors")
 
@@ -54,6 +60,8 @@ func run(args []string) error {
 		return contentCmd(args[1:])
 	case "user":
 		return userCmd(args[1:], os.Stdin, os.Stdout)
+	case "gc":
+		return gcCmd(args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -71,6 +79,7 @@ func usage() {
 
 commands:
   serve          run the HTTP server
+  gc             remove leftover sandboxes of this instance
   content lint   validate a content directory
   user           manage local accounts: add, passwd, disable, enable, list
   version        print the build version
@@ -137,6 +146,7 @@ func serve(args []string) error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 	slog.SetDefault(logger)
+	warnInotifyLimit(logger)
 
 	loaded, err := content.LoadAll(cfg.ContentDir)
 	if err != nil {
@@ -165,7 +175,7 @@ func serve(args []string) error {
 		}
 	}()
 
-	provider := docker.New(cli, docker.Options{Image: cfg.NodeImage})
+	provider := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance, SystemdTimeout: cfg.SystemdTimeout})
 	attempts := attempt.New(attempt.Deps{
 		Store:       st,
 		Runner:      provider,
@@ -223,7 +233,7 @@ func serve(args []string) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		logger.Info("server listening", "addr", cfg.Listen, "version", version)
+		logger.Info("server listening", "addr", cfg.Listen, "version", version, "instance", cfg.Instance)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- fmt.Errorf("listen and serve: %w", err)
 			return
@@ -245,4 +255,41 @@ func serve(args []string) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return <-errc
+}
+
+func warnInotifyLimit(logger *slog.Logger) {
+	b, err := os.ReadFile(inotifyInstancesPath)
+	if err != nil {
+		return
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || value >= minInotifyInstances {
+		return
+	}
+	logger.Warn("inotify instance limit is low, sandboxes may fail to boot under load",
+		"path", inotifyInstancesPath,
+		"value", value,
+		"recommended", fmt.Sprintf("sysctl -w fs.inotify.max_user_instances=%d", minInotifyInstances))
+}
+
+func gcCmd(args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("gc takes no arguments, got %q", args[0])
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("create docker client: %w", err)
+	}
+	defer func() { _ = cli.Close() }()
+
+	if err := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance}).GC(context.Background()); err != nil {
+		return err
+	}
+	fmt.Printf("gc: instance %s is clean\n", cfg.Instance)
+	return nil
 }
