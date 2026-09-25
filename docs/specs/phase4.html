@@ -1,0 +1,275 @@
+<title>Phase 4 遠端 Runner 與 VM</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f7f8;--surface:#ffffff;--ink:#17222b;--muted:#5b6b76;--line:#d9e0e4;
+  --accent:#0f6e6c;--accent-ink:#ffffff;--accent-soft:#dff0ee;
+  --warn-soft:#fbeedb;--warn:#8a5a0b;--pending-soft:#e9e6f7;--pending:#4d3f9e;
+  --code-bg:#eef2f4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+    --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+    --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+    --code-bg:#0b1014;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1519;--surface:#161e24;--ink:#e6ecef;--muted:#98a7b1;--line:#2a353d;
+  --accent:#4fbdb9;--accent-ink:#0b1416;--accent-soft:#12312f;
+  --warn-soft:#3a2a10;--warn:#e8b866;--pending-soft:#25214a;--pending:#b8adf5;
+  --code-bg:#0b1014;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;}
+.wrap{max-width:900px;margin:0 auto;padding-block:40px 80px;padding-inline:20px;}
+h1,h2,h3,h4{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:30px;font-weight:700}
+h2{font-size:20px;font-weight:700;margin-top:56px;padding-bottom:8px;border-bottom:2px solid var(--line);display:flex;align-items:baseline;gap:12px}
+h2 .n{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);letter-spacing:.08em}
+h3{font-size:16px;font-weight:700;margin-top:28px}
+h4{font-size:14.5px;font-weight:700;margin-top:18px}
+p{margin:12px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;color:var(--muted);font-size:13px;margin-top:14px}
+.meta b{color:var(--ink);font-weight:500}
+.lede{font-size:16px;color:var(--muted);margin-top:18px;max-width:66ch}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px}
+code{background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;line-height:1.55;margin:12px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+.tbl{overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;background:var(--surface)}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:2px 8px;border-radius:999px;letter-spacing:.04em;vertical-align:middle}
+.tag.risk{background:var(--accent-soft);color:var(--accent)}
+.tag.pending{background:var(--pending-soft);color:var(--pending)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-top:22px}
+.card header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;margin-bottom:6px}
+.card header h3{margin:0}
+.card header .id{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-weight:500}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;margin-top:10px}
+.grid>div>b{display:block;font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.04em;margin-bottom:2px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.decision{border-left:3px solid var(--pending);padding:2px 0 2px 16px;margin:18px 0}
+.decision b.q{display:block}
+.decision .why{color:var(--muted);font-size:14px}
+.callout{background:var(--accent-soft);border-radius:8px;padding:16px 20px;margin:20px 0}
+.callout p{margin:6px 0}
+.approve{margin-top:48px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 24px}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--surface)}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">network-skill-lab · spec</div>
+<h1>Phase 4 遠端 Runner 與 VM</h1>
+<div class="meta">
+  <span>類型 <b>spike + 正式開發</b></span>
+  <span>版本 <b>v1 草案</b></span>
+  <span>日期 <b>2026-09-25</b></span>
+  <span>撰寫 <b>Fable 5.1（planner）</b></span>
+  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+</div>
+<p class="lede">到 Phase 3 為止，控制面與沙箱在同一台機器，這是 R6 記錄的上線前置條件。Phase 4 把 <code>Runner</code> 介面真正變成遠端的：成員在自己的主機跑 <code>nsl runner</code>，用 token 連回控制面，題目在他們的機器上執行；控制面主機不再需要 Docker。同一個 phase 先用 spike 驗證 VM provider（libvirt + KVM + cloud-init），通過才正式化，讓 <code>environment: vm</code> 的擬真題有落點。</p>
+
+<h2><span class="n">01</span>目標與完成定義</h2>
+<ol>
+<li><b>遠端執行。</b>一個 <code>nsl runner</code> 在另一台主機（或同機另一個使用者 / 容器內的 Docker）以 token 連上控制面，使用者從瀏覽器開題，沙箱建在 runner 主機，terminal、checkpoint、錄影、指令歷史全部如常；控制面主機上沒有任何 <code>nsl.managed</code> 資源。</li>
+<li><b>斷線有交代。</b>runner 斷線時進行中的 attempt 在 10 秒內進 <code>error</code>（原因「runner disconnected」）並顯示於 UI；runner 重連後其殘留沙箱被清掉，可立刻再接新題。</li>
+<li><b>多 runner 並存。</b>控制面內建的 in-process runner（若主機有 Docker）與遠端 runner 同時各跑一題；每個 runner 的容量分別計算，admin 頁看得到每個 runner 的名稱、能力、使用量與連線狀態。</li>
+<li><b>VM spike 有結論。</b>§08 的五項驗證有實測結果寫回 <code>docs/PHASE4-RESULTS.md</code>，並據此決定 T4 做或延後。</li>
+<li><b>VM lab 可跑</b>（條件式，spike 通過才算入）：一個 <code>environment: vm</code> 的 lab 在 VM runner 上從瀏覽器跑到 passed，冷啟動 &lt; 90 秒。</li>
+<li><b>保留策略。</b><code>nsl prune --older-than 30d</code> 刪除舊 attempt 的錄影與紀錄；admin 頁顯示磁碟用量；#71 修好。</li>
+<li><b>回歸。</b>Phase 1 到 3 的驗收條目、<code>make test-integration</code>、<code>make test-content</code> 在 in-process runner 上維持通過；同一套 content 測試也能指向遠端 runner 跑一次。</li>
+</ol>
+
+<h2><span class="n">02</span>範圍</h2>
+<div class="tbl"><table>
+<tr><th>在範圍內</th><th>不在範圍內</th></tr>
+<tr><td>
+<ul>
+<li>Runner 協定：一條 WebSocket、控制訊息 + 多路串流（§05）</li>
+<li>控制面：runner 註冊表、token、排程、容量、斷線處理、admin 顯示（§06）</li>
+<li><code>nsl runner</code> 子指令：同一個 binary，外連控制面，本地用 Docker provider（§06）</li>
+<li>VM spike（§08）與條件式的 VM provider（§09）</li>
+<li>保留策略與 #71（§10）</li>
+<li>資料模型：<code>runners</code> 表、<code>attempts.runner_id</code> 開始使用（§11）</li>
+</ul>
+</td><td>
+<ul>
+<li>runner 自動發現、mTLS、憑證輪替 → token 足夠，之後再說</li>
+<li>跨 runner 的沙箱遷移、排隊等待 → 沒有空位就 429（P4 沿用）</li>
+<li>VM 快照、GPU、巢狀 VM 內的 k3s → 之後</li>
+<li>網路裝置（containerlab / FRR）、面試模式 → Phase 5</li>
+<li>runner 的自動更新 → 手動換 binary</li>
+</ul>
+</td></tr>
+</table></div>
+
+<h2><span class="n">03</span>待批的提案</h2>
+<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+
+<div class="decision"><b class="q">P1 runner 外連控制面，單一 WebSocket，JSON 控制訊息 + 帶 stream id 的二進位串流</b>
+控制面不主動連 runner，runner 主機不需要開 port、不需要公網。同一條連線承載 RPC（Provision、Exec、Destroy、GC、Health）與 PTY 串流（每個 terminal 分頁一個 stream id）。
+<div class="why">理由：成員的機器多在 NAT 後面；一條連線最簡單，斷線語意也單一。</div></div>
+
+<div class="decision"><b class="q">P2 認證用每個 runner 一個靜態 token，admin 在管理頁建立，DB 只存 argon2id 雜湊</b>
+token 建立時顯示一次；runner 以 <code>NSL_RUNNER_TOKEN</code> 或 <code>--token-file</code> 帶入。
+<div class="why">理由：與帳號同一套雜湊與流程；不需要 PKI。</div></div>
+
+<div class="decision"><b class="q">P3 斷線語意：控制面在 10 秒內把該 runner 上所有進行中的 attempt 標為 <code>error</code>；runner 自己保留沙箱最多 2 分鐘等重連，重連後控制面下令銷毀</b>
+不做「重連後接續」：pty 已斷、checker 已停，接續的複雜度不值得。
+<div class="why">理由：D13 預期單人使用，斷線是例外；清楚的失敗勝過半吊子的恢復。</div></div>
+
+<div class="decision"><b class="q">P4 排程：依 lab 的 <code>environment</code> 過濾有能力的 runner，取「使用中沙箱數 / 容量」最低者；全部滿了回 429</b>
+in-process runner 的容量沿用 <code>NSL_MAX_SANDBOXES</code>；遠端 runner 由 <code>nsl runner --max-sandboxes</code> 宣告。控制面在 <code>/api/admin/stats</code> 與 429 回應中列出每個 runner。
+<div class="why">理由：最簡單且可解釋的策略；lab 綁定特定 runner 的需求還沒出現。</div></div>
+
+<div class="decision"><b class="q">P5 VM 的 Exec 走 qemu-guest-agent，terminal 走 mgmt 介面的 SSH</b>
+guest-agent 不經過 VM 的網路堆疊，題目把介面全關 checker 仍能跑（R4 的 VM 對應）；SSH 用 runner 產生的一次性金鑰，走 mgmt 網路（題目不准動 mgmt，與容器規則相同）。
+<div class="why">理由：guest-agent 的 exec 沒有互動 pty；SSH 是最穩的 pty 來源，mgmt 永遠通。</div></div>
+
+<div class="decision"><b class="q">P6 VM image 由 <code>images/vm/build.sh</code> 從 Ubuntu 24.04 cloud image 產生 qcow2，預裝與 <code>nsl/node</code> 相同的 66 個套件與 bootstrap 腳本</b>
+每個 VM 用 backing file 開 overlay，冷啟動只複製差異層。
+<div class="why">理由：與容器同一份工具清單與 bootstrap 契約，內容不用分兩套。</div></div>
+
+<div class="decision"><b class="q">P7 VM spike 的門檻：runner 主機必須有 KVM；WSL2 沒有就在你的另一台機器或實體 Linux 上驗，驗不到就把 T4 延到 Phase 5</b>
+<div class="why">理由：沒有 KVM 的 QEMU 純軟體模擬慢到不能當練習環境；這是硬體前提，不是程式問題。</div></div>
+
+<div class="decision"><b class="q">P8 保留策略只做手動與定時的 prune，不做配額</b>
+<code>nsl prune --older-than 30d [--dry-run]</code> 刪終態超過 N 天的 attempt（列 + 錄影檔）；<code>NSL_PRUNE_AFTER</code> 設定後 serve 每天執行一次。admin 頁顯示總用量與最舊紀錄日期。
+<div class="why">理由：配額需要使用數據；prune 先把磁碟守住。</div></div>
+
+<div class="decision"><b class="q">P9 <code>nsl runner</code> 與 <code>nsl serve</code> 是同一個 binary；runner 主機只需要 Docker（或 libvirt）與這個檔案</b>
+<div class="why">理由：D3 all-in-one 的延伸；版本一致由 handshake 檢查（協定版本不合直接拒絕並提示）。</div></div>
+
+<div class="decision"><b class="q">P10 in-process runner 保留，控制面主機沒有 Docker 時自動停用，不報錯</b>
+<div class="why">理由：單機開發與 CI 仍用它；正式部署時控制面主機可以完全不裝 Docker。</div></div>
+
+<h2><span class="n">04</span>架構變更</h2>
+<pre><code>internal/
+  runner/         Runner 介面不變；+ Registry（多 runner）、Scheduler、RunnerInfo{Name, Capabilities, Capacity, Active, Connected}
+  runnerproto/    協定：訊息型別、編碼、stream 多路復用（純函式，兩端共用）
+  runnerclient/   runner 端：連線、重連、把 RPC 轉呼叫本地 provider、PTY 串流轉發、保留沙箱 2 分鐘
+  runnerserver/   控制面端：接受 runner 連線、token 驗證、把 Runner 介面實作在連線上（RemoteRunner）
+  provider/vm/    T4：libvirt + QEMU/KVM + cloud-init（條件式）
+  attempt/        Start 改走 Scheduler；runner 斷線 → error；runner_id 落 DB
+  api/            admin runners 端點；stats 加 runners；429 帶 runners
+  store/          runners 表、prune 查詢
+cmd/nsl/          + `runner`、`prune`、`runner token` 子指令（token 建立也可在 admin 頁）
+images/vm/        build.sh、cloud-init 範本
+spikes/phase4/    VM 驗證腳本與結果</code></pre>
+<p>依賴方向：<code>attempt → runner</code> 不變；<code>runnerserver</code> 實作 <code>runner.Runner</code>；<code>runnerclient → provider/*</code>。PTY 位元組經控制面轉發（錄影仍在控制面完成），不做 runner 直連瀏覽器。</p>
+
+<h2><span class="n">05</span>Runner 協定</h2>
+<pre><code>連線：runner → wss://&lt;控制面&gt;/ws/runner，header Authorization: Bearer &lt;token&gt;
+握手：runner 送 { "type": "hello", "proto": 1, "name", "version", "capabilities": ["container"], "capacity": 3 }
+      控制面回 { "type": "welcome", "runner_id" } 或關閉（4001 版本不合、4003 token 無效）
+心跳：runner 每 15 秒 { "type": "ping", "active": n }；控制面 30 秒沒收到視為斷線
+RPC（控制面 → runner，text frame）：
+  { "type": "call", "id", "method": "provision"|"exec"|"destroy"|"gc"|"health"|"open_terminal"|"resize"|"close_terminal", "params": {...} }
+  runner 回 { "type": "result", "id", "ok": bool, "value": {...} | "error": "..." }
+  provision 的 progress：runner 送 { "type": "progress", "id", "step" }
+串流（binary frame）：前 4 bytes 為 stream id（open_terminal 的回傳值），其後為 pty 位元組；雙向同格式
+  runner 送 { "type": "stream_closed", "stream": id }（shell 結束）
+方法參數即 runner.SandboxSpec 等既有型別的 JSON；Exec 的 stdin 以 base64 放進 params（腳本內容都很小）；ExecResult 同樣回 base64 的 stdout/stderr。</code></pre>
+<p>控制面對每個 runner 連線建立一個 <code>RemoteRunner</code>，實作 <code>runner.Runner</code>：方法 = 送 call 等 result，逾時與 ctx 取消都會送 cancel（runner 端盡力中止）。</p>
+
+<h2><span class="n">06</span>控制面與 runner 端</h2>
+<h4>控制面</h4>
+<ul>
+<li><code>runners</code> 表（§11）與 admin 端點：建立 token（回明文一次）、列表（名稱、能力、容量、使用中、連線狀態、最後心跳、版本）、撤銷。</li>
+<li>Scheduler（P4）；<code>attempts.runner_id</code> 記名稱；斷線處理（P3）；<code>Recover</code> 對每個已連線的 runner 送 gc（instance 標籤沿用 runner 名稱）。</li>
+<li>in-process runner 以名稱 <code>local</code> 註冊，能力 <code>container</code>，容量 <code>NSL_MAX_SANDBOXES</code>；主機沒有 Docker 時不註冊（P10）。</li>
+<li>錄影、指令歷史、checker 完全不動：它們只認 <code>runner.Runner</code>。</li>
+</ul>
+<h4>runner 端</h4>
+<ul>
+<li><code>nsl runner --url wss://host --name lab-01 --max-sandboxes 3 [--provider docker|vm] [--instance ...]</code>，token 從 <code>NSL_RUNNER_TOKEN</code> 或 <code>--token-file</code>。</li>
+<li>重連：指數退避 1 到 30 秒；重連成功後回報仍存在的沙箱清單，由控制面決定銷毀。</li>
+<li>本地 provider 沿用 <code>provider/docker</code>（instance 標籤 = runner 名稱），VM 用 <code>provider/vm</code>。</li>
+<li>日誌與健康：<code>--metrics-listen</code> 不做；健康以 hello / ping 為準。</li>
+</ul>
+
+<h2><span class="n">07</span>API 與 Web</h2>
+<pre><code>POST /api/admin/runners          { "name", "capabilities"?: [...] }  → 201 { "id", "name", "token": "一次性明文" }
+GET  /api/admin/runners          → [{ "id", "name", "capabilities", "capacity", "active", "connected", "last_seen_at", "version", "revoked_at" }]
+DELETE /api/admin/runners/{id}   → 204（撤銷；已連線的立刻踢掉）
+GET  /api/admin/stats            += "runners": [ 同上摘要 ]
+POST /api/attempts 的 429        += "runners": [{ "name", "active", "capacity" }]
+Attempt JSON                     += "runner": "local" | "&lt;name&gt;"</code></pre>
+<ul>
+<li>admin 頁加「Runners」區：建立（顯示一次 token 與 <code>nsl runner</code> 指令範例）、列表、撤銷。</li>
+<li>練習頁狀態列顯示 runner 名稱；provisioning 面板遇到 runner 斷線顯示原因。</li>
+<li>lab 詳情：<code>environment: vm</code> 的 lab 在沒有 vm runner 時 Start 停用並說明。</li>
+</ul>
+
+<h2><span class="n">08</span>VM spike（T0，planner 直接做）</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>驗證</th><th>通過條件</th></tr>
+<tr><td>V1</td><td>runner 主機 KVM 可用（<code>/dev/kvm</code>、libvirtd、<code>virsh capabilities</code>）；WSL2 需 <code>nestedVirtualization=true</code></td><td>能以 KVM 加速啟動一台 VM；否則觸發 P7</td></tr>
+<tr><td>V2</td><td>用 build.sh 產生的 qcow2 + cloud-init（user-data 注入 SSH 金鑰與 bootstrap 環境變數）開機</td><td>從 <code>virsh create</code> 到 qemu-guest-agent 可 ping &lt; 45 秒；到 SSH 可登入 &lt; 60 秒</td></tr>
+<tr><td>V3</td><td>guest-agent exec 跑 check 腳本，含把所有介面關掉、nft 全 DROP 後</td><td>exec 仍成功，回傳 exit code 與輸出</td></tr>
+<tr><td>V4</td><td>兩台 VM 接 libvirt 隔離網路（每條 link 一個 <code>&lt;network&gt;</code> 無 DHCP 無 NAT）+ mgmt NAT 網路；bootstrap 用 netplan 設位址</td><td>eth1 互 ping 通；mgmt 不受題目影響</td></tr>
+<tr><td>V5</td><td>資源：每台 VM 記憶體 512 MB 到 1 GB，兩台並存的主機負載與磁碟</td><td>兩台 VM 冷啟動總計 &lt; 90 秒，記憶體有數字</td></tr>
+</table></div>
+<p>結果寫 <code>docs/PHASE4-RESULTS.md</code> §VM spike；V1 失敗即記錄並把 T4 延後，其餘 task 照常。</p>
+
+<h2><span class="n">09</span>VM provider（T4，條件式）</h2>
+<ul>
+<li>libvirt 經 <code>libvirt.org/go/libvirt</code>（需 cgo）或 <code>virsh</code> CLI 包裝；spike 決定，傾向 CLI 包裝以維持純 Go 建置。</li>
+<li>Provision：建 mgmt + link 網路 → 每個 node 建 overlay qcow2 → cloud-init ISO（hostname、SSH 金鑰、<code>NSL_*</code> 環境寫進 <code>/etc/nsl/bootstrap.env</code>）→ define + start → 等 guest-agent → bootstrap（guest-agent exec）→ setup。</li>
+<li>OpenTerminal：SSH 到 mgmt IP（<code>golang.org/x/crypto/ssh</code>，nsl 使用者、一次性金鑰）；Exec：guest-agent。</li>
+<li>Destroy：destroy + undefine + 刪 overlay 與 ISO；GC 依 domain metadata 的 instance 標籤。</li>
+<li>role：ubuntu / ubuntu-nm 先做；k3s 在 VM 內理論可行但不在 Phase 4 驗證。</li>
+</ul>
+
+<h2><span class="n">10</span>保留與清理</h2>
+<ul>
+<li><code>nsl prune --older-than &lt;dur&gt; [--dry-run]</code>：刪除終態且 <code>ended_at</code> 早於門檻的 attempt（cascade）與其錄影目錄；印出筆數與釋放大小。</li>
+<li><code>NSL_PRUNE_AFTER</code>（如 <code>720h</code>）：serve 啟動後每 24 小時跑一次。</li>
+<li>admin stats 加 <code>oldest_attempt_at</code>。</li>
+<li>#71：Destroy 等容器真的消失再刪網路，重試視窗 15 秒；<code>nsl gc</code> 回報數量。</li>
+</ul>
+
+<h2><span class="n">11</span>資料模型</h2>
+<ul>
+<li>migration 0004：<code>runners(id TEXT PK, name TEXT UNIQUE, token_hash TEXT, capabilities TEXT, capacity INTEGER, created_at, last_seen_at, revoked_at, version TEXT)</code>。</li>
+<li><code>attempts.runner_id</code> 存 runner 名稱（既有欄位）。</li>
+</ul>
+
+<h2><span class="n">12</span>Task 拆分</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>Task</th><th>驗收</th></tr>
+<tr><td>T0</td><td>VM spike（planner）：§08 V1 到 V5，<code>images/vm/build.sh</code> 初版</td><td>結果寫回；T4 去留決定</td></tr>
+<tr><td>T1</td><td>保留與清理：<code>nsl prune</code>、<code>NSL_PRUNE_AFTER</code>、stats、#71</td><td>單元 + 整合測試；prune dry-run 與實刪</td></tr>
+<tr><td>T2</td><td>協定與兩端：<code>runnerproto</code>、<code>runnerserver</code>（RemoteRunner）、<code>runnerclient</code>、<code>nsl runner</code>、runners 表與 token CLI</td><td>兩端在同一個測試程序內對接：Provision / Exec / PTY / Destroy 經協定跑完 fixture lab；斷線與重連測試</td></tr>
+<tr><td>T3</td><td>控制面整合：Registry、Scheduler、斷線 → error、admin runners 端點與頁面、429 與 attempt 的 runner 欄位、in-process runner 註冊為 local</td><td>e2e：local + 遠端各跑一題；容量各自計；撤銷 token 踢掉連線</td></tr>
+<tr><td>T4</td><td>VM provider（條件式）+ 一個 <code>environment: vm</code> 的 fixture lab（沿用 net-ip-01 的內容，只換 environment）</td><td>從瀏覽器跑到 passed；冷啟動數字</td></tr>
+<tr><td>T5</td><td>驗收：§01 七條；PHASE4-RESULTS.md；README 的 runner 部署一段</td><td>§01 全部成立</td></tr>
+</table></div>
+<p>T0 與 T1 先行且平行；T2 是核心，T3 等 T2；T4 等 T0 結論與 T2；驗收需要第二台主機或同機的第二個 Docker 使用者（用 <code>NSL_INSTANCE</code> 與不同 data dir 模擬）。</p>
+
+<h2><span class="n">13</span>風險</h2>
+<ul>
+<li><b>PTY 經兩層 WebSocket 轉發的延遲</b>：目標 &lt; 50 ms 額外延遲；T2 量。</li>
+<li><b>KVM 在 WSL2</b>：需要 Windows 11 與 <code>.wslconfig</code> 設定；不確定你的環境是否允許，這就是 T0 的意義。</li>
+<li><b>libvirt 的 Go 綁定需要 cgo</b>：與 P4 的純 Go 原則衝突，傾向 virsh CLI 包裝。</li>
+<li><b>runner 主機是 root 等級的攻擊面</b>：token 外洩等於該主機的 Docker 控制權；README 要講清楚，且 token 撤銷要立即生效。</li>
+</ul>
+
+<div class="approve">
+<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
+<ol>
+<li>P1 到 P10 有沒有要改的？特別是 P3 斷線不接續、P5 VM 的 exec / pty 走法。</li>
+<li>VM spike 要在哪台機器跑？你的 WSL2 有沒有開巢狀虛擬化，或有另一台 Linux 主機？</li>
+<li>批准後我先做 T0 spike 與派 T1，同時派 T2。</li>
+</ol>
+</div>
+</div>
