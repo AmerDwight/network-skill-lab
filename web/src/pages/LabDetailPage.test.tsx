@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -25,6 +26,7 @@ vi.mock("../api/client", async (importOriginal) => {
     getLab: vi.fn(),
     getCurrentAttempt: vi.fn(),
     createAttempt: vi.fn(),
+    getRunnerSummary: vi.fn(),
     runnerBusyOf: actual.runnerBusyOf,
   };
 });
@@ -33,8 +35,10 @@ const getHealth = vi.mocked(client.getHealth);
 const getLab = vi.mocked(client.getLab);
 const getCurrentAttempt = vi.mocked(client.getCurrentAttempt);
 const createAttempt = vi.mocked(client.createAttempt);
+const getRunnerSummary = vi.mocked(client.getRunnerSummary);
 
 const lab: LabDetail = {
+  environment: "container",
   id: "net-ip-01-link-down",
   title: "Server lost connectivity",
   topic: "net/ip",
@@ -57,6 +61,7 @@ const attempt: Attempt = {
   mode: "guided",
   status: "provisioning",
   error_message: "",
+  runner: "local",
   lab,
   ticket: "the server cannot reach the gateway",
   nodes: lab.nodes,
@@ -105,6 +110,9 @@ beforeEach(async () => {
   });
   getCurrentAttempt.mockResolvedValue(null);
   getLab.mockResolvedValue(lab);
+  getRunnerSummary.mockResolvedValue([
+    { name: "local", capabilities: ["container"], connected: true },
+  ]);
 });
 
 afterEach(() => {
@@ -177,6 +185,10 @@ describe("LabDetailPage", () => {
       new client.ApiError(429, "runner_busy", "every sandbox is in use", {
         sandboxes_active: 3,
         sandboxes_max: 3,
+        runners: [
+          { name: "lab-01", active: 2, capacity: 2 },
+          { name: "local", active: 1, capacity: 1 },
+        ],
       }),
     );
     renderPage();
@@ -189,6 +201,41 @@ describe("LabDetailPage", () => {
         "3 of 3 sandboxes are running. Try again in a moment.",
       ),
     ).toBeDefined();
+    expect(screen.getByText("lab-01: 2 / 2")).toBeDefined();
+    expect(screen.getByText("local: 1 / 1")).toBeDefined();
+  });
+
+  it("disables start for a vm lab when no connected runner offers vm", async () => {
+    getLab.mockResolvedValue({ ...lab, environment: "vm" });
+    getRunnerSummary.mockResolvedValue([
+      { name: "local", capabilities: ["container"], connected: true },
+      { name: "kvm-01", capabilities: ["vm"], connected: false },
+    ]);
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "No connected runner can run VM labs right now, so this lab cannot start.",
+      ),
+    ).toBeDefined();
+    for (const mode of ["Tutorial", "Guided", "Real"]) {
+      expect(startButtonFor(mode).hasAttribute("disabled")).toBe(true);
+    }
+  });
+
+  it("lets a vm lab start once a vm runner is connected", async () => {
+    getLab.mockResolvedValue({ ...lab, environment: "vm" });
+    getRunnerSummary.mockResolvedValue([
+      { name: "kvm-01", capabilities: ["container", "vm"], connected: true },
+    ]);
+    renderPage();
+
+    await screen.findByRole("heading", { name: "Guided" });
+    await waitFor(() => {
+      expect(getRunnerSummary).toHaveBeenCalled();
+    });
+    expect(startButtonFor("Guided").hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByText(/No connected runner/)).toBeNull();
   });
 
   it("disables every mode while another attempt is running", async () => {

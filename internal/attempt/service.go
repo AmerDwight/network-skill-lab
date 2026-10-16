@@ -49,9 +49,12 @@ var (
 	ErrRunnerBusy     = errors.New("all sandbox slots are in use")
 )
 
+const ReasonRunnerDisconnected = "runner disconnected"
+
 type RunnerBusy struct {
-	Active int
-	Max    int
+	Active  int
+	Max     int
+	Runners []runner.Load
 }
 
 func (e RunnerBusy) Error() string {
@@ -63,9 +66,9 @@ func (e RunnerBusy) Unwrap() error { return ErrRunnerBusy }
 type Deps struct {
 	Store        *store.Store
 	Runner       runner.Runner
+	Runners      *runner.Registry
 	Content      *content.Content
 	Image        string
-	RunnerID     string
 	DataDir      string
 	MaxSandboxes int
 	IdleTimeout  time.Duration
@@ -82,13 +85,11 @@ type Sweeper interface {
 
 type Service struct {
 	store        *store.Store
-	runner       runner.Runner
+	runners      *runner.Registry
 	labs         map[string]content.Lab
 	docs         map[string]content.Doc
 	image        string
-	runnerID     string
 	dataDir      string
-	maxSandboxes int
 	idleTimeout  time.Duration
 	tickInterval time.Duration
 	hookTimeout  time.Duration
@@ -112,6 +113,9 @@ type Service struct {
 
 	sweeperMu sync.Mutex
 	sweeper   Sweeper
+
+	sandboxMu sync.Mutex
+	sandboxes map[runner.SandboxID]string
 }
 
 type BeforeDestroyFunc func(ctx context.Context, v View)
@@ -149,6 +153,9 @@ func New(deps Deps) *Service {
 	if deps.MaxSandboxes <= 0 {
 		deps.MaxSandboxes = defaultMaxSandboxes
 	}
+	if deps.Runners == nil {
+		deps.Runners = runner.NewRegistry(deps.Runner, deps.MaxSandboxes, nil)
+	}
 	if deps.IdleTimeout <= 0 {
 		deps.IdleTimeout = defaultIdleTimeout
 	}
@@ -171,13 +178,11 @@ func New(deps Deps) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
 		store:        deps.Store,
-		runner:       deps.Runner,
+		runners:      deps.Runners,
 		labs:         labs,
 		docs:         docs,
 		image:        deps.Image,
-		runnerID:     deps.RunnerID,
 		dataDir:      deps.DataDir,
-		maxSandboxes: deps.MaxSandboxes,
 		idleTimeout:  deps.IdleTimeout,
 		tickInterval: deps.TickInterval,
 		hookTimeout:  deps.HookTimeout,
@@ -188,6 +193,7 @@ func New(deps Deps) *Service {
 		ctx:          ctx,
 		cancel:       cancel,
 		tracked:      map[string]*tracker{},
+		sandboxes:    map[runner.SandboxID]string{},
 	}
 }
 
@@ -274,7 +280,7 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 		Status:     store.StatusProvisioning,
 		CreatedAt:  now,
 	}
-	if err := s.reserve(ctx, att); err != nil {
+	if err := s.reserve(ctx, &att, lab); err != nil {
 		return View{}, err
 	}
 
@@ -282,12 +288,12 @@ func (s *Service) Start(ctx context.Context, userID, labID, mode string) (View, 
 	s.bus.publish(statusEvent(att, now))
 
 	s.wg.Add(1)
-	go s.provision(att.ID, lab, resolved, seed)
+	go s.provision(att.ID, att.RunnerID, lab, resolved, seed)
 
 	return s.view(ctx, att)
 }
 
-func (s *Service) reserve(ctx context.Context, att store.Attempt) error {
+func (s *Service) reserve(ctx context.Context, att *store.Attempt, lab content.Lab) error {
 	s.startMu.Lock()
 	defer s.startMu.Unlock()
 
@@ -296,14 +302,36 @@ func (s *Service) reserve(ctx context.Context, att store.Attempt) error {
 	} else if active {
 		return fmt.Errorf("%w: user %s", ErrActiveAttempt, att.UserID)
 	}
-	active, err := s.store.Attempts.CountActive(ctx)
+	active, err := s.store.Attempts.CountActiveByRunner(ctx)
 	if err != nil {
 		return err
 	}
-	if active >= s.maxSandboxes {
-		return RunnerBusy{Active: active, Max: s.maxSandboxes}
+	name, err := runner.Schedule(s.runners.Members(), active, environmentOf(lab))
+	var busy runner.BusyError
+	if errors.As(err, &busy) {
+		return busyOf(busy)
 	}
-	return s.store.Attempts.Create(ctx, att)
+	if err != nil {
+		return err
+	}
+	att.RunnerID = name
+	return s.store.Attempts.Create(ctx, *att)
+}
+
+func environmentOf(lab content.Lab) runner.Env {
+	if lab.Environment == "" {
+		return runner.EnvContainer
+	}
+	return runner.Env(lab.Environment)
+}
+
+func busyOf(busy runner.BusyError) RunnerBusy {
+	result := RunnerBusy{Runners: busy.Runners}
+	for _, load := range busy.Runners {
+		result.Active += load.Active
+		result.Max += load.Capacity
+	}
+	return result
 }
 
 func (s *Service) Get(ctx context.Context, id string) (View, error) {
@@ -443,8 +471,14 @@ func (s *Service) Recover(ctx context.Context) error {
 	}
 	s.log.Info("expired attempts left behind by the previous run", "count", len(attempts))
 
-	if err := s.runner.GC(ctx); err != nil {
-		s.log.Warn("collect leftover sandboxes", "error", err)
+	for _, member := range s.runners.Members() {
+		r, ok := s.runners.Get(member.Name)
+		if !ok {
+			continue
+		}
+		if err := r.GC(ctx); err != nil {
+			s.log.Warn("collect leftover sandboxes", "runner", member.Name, "error", err)
+		}
 	}
 	return nil
 }
@@ -568,23 +602,28 @@ func (s *Service) tick(id string, startedAt time.Time, stop <-chan struct{}) {
 	}
 }
 
-func (s *Service) provision(id string, lab content.Lab, resolved content.Resolved, seed uint64) {
+func (s *Service) provision(id, name string, lab content.Lab, resolved content.Resolved, seed uint64) {
 	defer s.wg.Done()
 
 	ctx, cancel := context.WithTimeout(s.ctx, time.Duration(provisionAttempts(lab))*provisionTimeout)
 	defer cancel()
 
-	sandbox, err := s.provisionUntilPrechecked(ctx, id, lab, resolved, seed)
+	r, ok := s.runners.Get(name)
+	if !ok {
+		s.failProvision(id, name, errors.New(ReasonRunnerDisconnected))
+		return
+	}
+	sandbox, err := s.provisionUntilPrechecked(ctx, id, placement{name: name, runner: r}, lab, resolved, seed)
 	if err != nil {
 		if s.stopping() {
 			s.log.Warn("provisioning interrupted by shutdown", "attempt", id, "error", err)
 			return
 		}
-		s.log.Error("provision attempt", "attempt", id, "error", err)
-		s.failProvision(id, err)
+		s.log.Error("provision attempt", "attempt", id, "runner", name, "error", err)
+		s.failProvision(id, name, err)
 		return
 	}
-	if err := s.promote(id, sandbox); err != nil {
+	if err := s.promote(id, name, sandbox); err != nil {
 		s.log.Error("start attempt after provisioning", "attempt", id, "error", err)
 	}
 }
@@ -596,10 +635,15 @@ func provisionAttempts(lab content.Lab) int {
 	return lab.Precheck.Retries
 }
 
-func (s *Service) provisionUntilPrechecked(ctx context.Context, id string, lab content.Lab, resolved content.Resolved, seed uint64) (runner.SandboxID, error) {
+type placement struct {
+	name   string
+	runner runner.Runner
+}
+
+func (s *Service) provisionUntilPrechecked(ctx context.Context, id string, at placement, lab content.Lab, resolved content.Resolved, seed uint64) (runner.SandboxID, error) {
 	total := provisionAttempts(lab)
 	for attempt := 1; ; attempt++ {
-		sandbox, err := s.runProvision(ctx, id, lab, resolved)
+		sandbox, err := s.runProvision(ctx, id, at, lab, resolved)
 		if err != nil {
 			return "", err
 		}
@@ -607,21 +651,21 @@ func (s *Service) provisionUntilPrechecked(ctx context.Context, id string, lab c
 			return sandbox, nil
 		}
 
-		failure, err := s.runPrecheck(ctx, id, sandbox, lab, resolved)
+		failure, err := s.runPrecheck(ctx, id, at.runner, sandbox, lab, resolved)
 		if err != nil {
-			s.destroy(id, string(sandbox))
+			s.destroy(at.name, id, string(sandbox))
 			return "", err
 		}
 		if failure == nil {
 			return sandbox, nil
 		}
 		if attempt == total {
-			s.destroy(id, string(sandbox))
+			s.destroy(at.name, id, string(sandbox))
 			return "", fmt.Errorf("precheck failed after %d attempts on %s: %s", total, failure.node, failure.stderr)
 		}
 
 		s.bus.publish(Event{AttemptID: id, Type: EventProvisioning, Step: StepPrecheck, Attempt: attempt + 1, ServerTime: s.now()})
-		s.destroy(id, string(sandbox))
+		s.destroy(at.name, id, string(sandbox))
 
 		seed++
 		resolved, err = lab.ResolveFor(seed)
@@ -639,7 +683,7 @@ type precheckFailure struct {
 	stderr string
 }
 
-func (s *Service) runPrecheck(ctx context.Context, id string, sandbox runner.SandboxID, lab content.Lab, resolved content.Resolved) (*precheckFailure, error) {
+func (s *Service) runPrecheck(ctx context.Context, id string, r runner.Runner, sandbox runner.SandboxID, lab content.Lab, resolved content.Resolved) (*precheckFailure, error) {
 	script, err := os.ReadFile(filepath.Join(lab.Dir, lab.Precheck.Script))
 	if err != nil {
 		return nil, fmt.Errorf("read precheck script: %w", err)
@@ -650,7 +694,7 @@ func (s *Service) runPrecheck(ctx context.Context, id string, sandbox runner.San
 		nodeEnv := maps.Clone(env)
 		nodeEnv["NSL_NODE"] = node
 		opts := runner.ExecOptions{Env: nodeEnv, Stdin: bytes.NewReader(script), Timeout: precheckTimeout}
-		result, err := s.runner.Exec(ctx, sandbox, node, []string{"bash", "-s"}, opts)
+		result, err := r.Exec(ctx, sandbox, node, []string{"bash", "-s"}, opts)
 		if err != nil {
 			return nil, fmt.Errorf("run precheck on %s: %w", node, err)
 		}
@@ -691,7 +735,7 @@ func newSeed() (uint64, error) {
 	return binary.BigEndian.Uint64(b[:]), nil
 }
 
-func (s *Service) runProvision(ctx context.Context, id string, lab content.Lab, resolved content.Resolved) (runner.SandboxID, error) {
+func (s *Service) runProvision(ctx context.Context, id string, at placement, lab content.Lab, resolved content.Resolved) (runner.SandboxID, error) {
 	var setup []byte
 	if lab.Setup != "" {
 		read, err := os.ReadFile(filepath.Join(lab.Dir, lab.Setup))
@@ -708,18 +752,27 @@ func (s *Service) runProvision(ctx context.Context, id string, lab content.Lab, 
 	spec.Progress = func(step string) {
 		s.bus.publish(Event{AttemptID: id, Type: EventProvisioning, Step: step, ServerTime: s.now()})
 	}
-	return s.runner.Provision(ctx, spec)
+	sandbox, err := at.runner.Provision(ctx, spec)
+	if err != nil {
+		return "", err
+	}
+	s.bind(sandbox, at.name)
+	return sandbox, nil
 }
 
-func (s *Service) failProvision(id string, cause error) {
+func (s *Service) failProvision(id, name string, cause error) {
 	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 	defer cancel()
-	if _, err := s.end(ctx, id, store.StatusError, cause.Error(), store.StatusProvisioning); err != nil {
+	reason := cause.Error()
+	if _, ok := s.runners.Get(name); !ok {
+		reason = ReasonRunnerDisconnected
+	}
+	if _, err := s.end(ctx, id, store.StatusError, reason, store.StatusProvisioning); err != nil && !errors.Is(err, ErrTerminal) {
 		s.log.Error("record failed provisioning", "attempt", id, "error", err)
 	}
 }
 
-func (s *Service) promote(id string, sandbox runner.SandboxID) error {
+func (s *Service) promote(id, name string, sandbox runner.SandboxID) error {
 	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 	defer cancel()
 
@@ -728,12 +781,12 @@ func (s *Service) promote(id string, sandbox runner.SandboxID) error {
 		return err
 	}
 	if att.Status != store.StatusProvisioning {
-		s.destroy(id, string(sandbox))
+		s.destroy(name, id, string(sandbox))
 		return nil
 	}
 
 	now := s.now()
-	if err := s.store.Attempts.SetSandbox(ctx, id, s.runnerID, string(sandbox)); err != nil {
+	if err := s.store.Attempts.SetSandbox(ctx, id, name, string(sandbox)); err != nil {
 		return err
 	}
 	if err := s.store.Attempts.SetStartedAt(ctx, id, now); err != nil {
@@ -786,7 +839,7 @@ func (s *Service) end(ctx context.Context, id, status, errorMessage string, from
 	s.untrack(id)
 	s.runBeforeDestroy(ctx, att)
 	s.bus.publish(statusEvent(att, now))
-	s.destroyAsync(att.ID, att.SandboxID)
+	s.destroyAsync(runnerOf(att), att.ID, att.SandboxID)
 	return att, nil
 }
 
@@ -831,23 +884,36 @@ func (s *Service) runHook(ctx context.Context, hook BeforeDestroyFunc, view View
 	}
 }
 
-func (s *Service) destroyAsync(id, sandbox string) {
+func (s *Service) destroyAsync(name, id, sandbox string) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		s.destroy(id, sandbox)
+		s.destroy(name, id, sandbox)
 	}()
 }
 
-func (s *Service) destroy(id, sandbox string) {
+func (s *Service) destroy(name, id, sandbox string) {
 	if sandbox == "" {
 		sandbox = id
 	}
+	defer s.unbind(runner.SandboxID(sandbox))
+	r, ok := s.runners.Get(name)
+	if !ok {
+		s.log.Warn("runner is not connected; its sandbox is destroyed when it reconnects", "attempt", id, "runner", name, "sandbox", sandbox)
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), destroyTimeout)
 	defer cancel()
-	if err := s.runner.Destroy(ctx, runner.SandboxID(sandbox)); err != nil && !errors.Is(err, runner.ErrSandboxNotFound) {
-		s.log.Error("destroy sandbox", "attempt", id, "sandbox", sandbox, "error", err)
+	if err := r.Destroy(ctx, runner.SandboxID(sandbox)); err != nil && !errors.Is(err, runner.ErrSandboxNotFound) {
+		s.log.Error("destroy sandbox", "attempt", id, "runner", name, "sandbox", sandbox, "error", err)
 	}
+}
+
+func runnerOf(att store.Attempt) string {
+	if att.RunnerID == "" {
+		return runner.LocalName
+	}
+	return att.RunnerID
 }
 
 func (s *Service) get(ctx context.Context, id string) (store.Attempt, error) {

@@ -21,6 +21,7 @@ function nodeConnection(
 export interface StatusBarProps {
   status: AttemptStatus | null;
   elapsedMs: number;
+  runner: string;
   nodes: LabNode[];
   terminals: Record<string, TerminalState>;
   eventsConnection: ConnectionState;
@@ -29,6 +30,7 @@ export interface StatusBarProps {
 export function StatusBar({
   status,
   elapsedMs,
+  runner,
   nodes,
   terminals,
   eventsConnection,
@@ -41,6 +43,11 @@ export function StatusBar({
       <span className={`badge badge--${status ?? "unknown"}`}>
         {status === null ? t("status.unknown") : t(`status.${status}`)}
       </span>
+      {runner !== "" ? (
+        <span className="status-bar__runner">
+          {t("statusBar.runner", { name: runner })}
+        </span>
+      ) : null}
       <ul className="status-bar__nodes">
         {nodes.map((node) => {
           const connection = nodeConnection(terminals, node.name);

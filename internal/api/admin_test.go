@@ -137,7 +137,7 @@ func TestAdminStats(t *testing.T) {
 	}
 
 	body := decodeJSON(t, h.send(h.adminClient(), http.MethodGet, "/api/admin/stats", ""))
-	requireKeys(t, body, "sandboxes_active", "sandboxes_max", "recordings_bytes", "attempts", "oldest_attempt_at")
+	requireKeys(t, body, "sandboxes_active", "sandboxes_max", "recordings_bytes", "attempts", "oldest_attempt_at", "runners")
 	if body["oldest_attempt_at"] != formatTime(att.CreatedAt) {
 		t.Errorf("oldest_attempt_at = %v, want %s", body["oldest_attempt_at"], formatTime(att.CreatedAt))
 	}
@@ -228,9 +228,18 @@ func TestStartIsRefusedWhenEverySandboxIsTaken(t *testing.T) {
 		t.Fatalf("status = %d, want 429", resp.StatusCode)
 	}
 	body := decodeJSON(t, resp)
-	requireKeys(t, body, "error", "sandboxes_active", "sandboxes_max")
+	requireKeys(t, body, "error", "sandboxes_active", "sandboxes_max", "runners")
 	if body["sandboxes_active"] != float64(1) || body["sandboxes_max"] != float64(1) {
 		t.Errorf("body = %v", body)
+	}
+	runners := body["runners"].([]any)
+	if len(runners) != 1 {
+		t.Fatalf("runners = %v, want only the local one", runners)
+	}
+	load := runners[0].(map[string]any)
+	requireKeys(t, load, "name", "active", "capacity")
+	if load["name"] != "local" || load["active"] != float64(1) || load["capacity"] != float64(1) {
+		t.Errorf("runner load = %v", load)
 	}
 	if failure := body["error"].(map[string]any); failure["code"] != "runner_busy" {
 		t.Errorf("error.code = %v, want runner_busy", failure["code"])

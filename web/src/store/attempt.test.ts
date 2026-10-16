@@ -31,6 +31,7 @@ const attempt: Attempt = {
   mode: "guided",
   status: "running",
   error_message: "",
+  runner: "local",
   lab: {
     id: "net-ip-01-link-down",
     title: "Server lost connectivity",

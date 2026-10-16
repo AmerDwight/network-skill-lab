@@ -7,6 +7,7 @@ import {
   adminDeleteAttempt,
   castUrl,
   createAttempt,
+  createRunner,
   getCommands,
   getCurrentAttempt,
   getDoc,
@@ -14,15 +15,18 @@ import {
   getLab,
   getMe,
   getResult,
+  getRunnerSummary,
   getTrack,
   listDocs,
   listHistory,
   listLabs,
   listRecordings,
+  listRunners,
   listTopics,
   listTracks,
   login,
   markDocRead,
+  revokeRunner,
   runnerBusyOf,
   updateUser,
 } from "./client";
@@ -329,6 +333,11 @@ describe("error handling", () => {
         error: { code: "runner_busy", message: "every sandbox is in use" },
         sandboxes_active: 3,
         sandboxes_max: 3,
+        runners: [
+          { name: "lab-01", active: 2, capacity: 2 },
+          { name: "local", active: 1, capacity: 1 },
+          { name: "broken" },
+        ],
       }),
     );
 
@@ -337,7 +346,19 @@ describe("error handling", () => {
     expect(runnerBusyOf(error)).toEqual({
       sandboxes_active: 3,
       sandboxes_max: 3,
+      runners: [
+        { name: "lab-01", active: 2, capacity: 2 },
+        { name: "local", active: 1, capacity: 1 },
+      ],
     });
+  });
+
+  it("reads runner busy details from a server without the runner list", () => {
+    const error = new ApiError(429, "runner_busy", "busy", {
+      sandboxes_active: 1,
+      sandboxes_max: 1,
+    });
+    expect(runnerBusyOf(error)?.runners).toEqual([]);
   });
 
   it("reads no runner busy details off another error", async () => {
@@ -398,6 +419,36 @@ describe("admin calls", () => {
 
     expect(lastUrl()).toBe("/api/admin/attempts/01JHIST0?lang=zh-TW");
     expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe("DELETE");
+  });
+
+  it("lists, creates and revokes runners", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+    await listRunners();
+    expect(lastUrl()).toBe("/api/admin/runners?lang=zh-TW");
+
+    fetchMock.mockResolvedValue(
+      jsonResponse(201, { id: "r1", name: "lab-01", token: "t" }),
+    );
+    const created = await createRunner({ name: "lab-01", capacity: 2 });
+    const init = fetchMock.mock.calls.at(-1)?.[1];
+    expect(created.token).toBe("t");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(JSON.stringify({ name: "lab-01", capacity: 2 }));
+
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await revokeRunner("r/1");
+    expect(lastUrl()).toBe("/api/admin/runners/r%2F1?lang=zh-TW");
+    expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe("DELETE");
+  });
+
+  it("reads the runner summary for any logged-in user", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, [
+        { name: "local", capabilities: ["container"], connected: true },
+      ]),
+    );
+    expect(await getRunnerSummary()).toHaveLength(1);
+    expect(lastUrl()).toBe("/api/runners/summary?lang=zh-TW");
   });
 });
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { AdminAttempt, AdminStats, AdminUser, Me } from "../api/types";
+import { AdminRunners } from "../components/AdminRunners";
 import { Header } from "../components/Header";
 import { formatBytes, formatDate, formatElapsed } from "../lib/format";
 import { isValidPassword, isValidUsername } from "../lib/validation";
@@ -331,6 +332,8 @@ function AdminView({ me }: { me: Me }) {
         ) : null}
         {stats.status === "ok" ? <StatsStrip stats={stats.stats} /> : null}
       </section>
+
+      <AdminRunners />
 
       <section className="admin-section">
         <h3 className="admin-section__heading">{t("admin.users")}</h3>

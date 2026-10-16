@@ -21,10 +21,14 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
+	"github.com/AmerDwight/network-skill-lab/internal/runnerserver"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 )
 
-const waitTimeout = 5 * time.Second
+const (
+	waitTimeout         = 5 * time.Second
+	defaultMaxSandboxes = 3
+)
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -299,6 +303,7 @@ type harness struct {
 	checker  *checker.Checker
 	store    *store.Store
 	runner   *fakeRunner
+	hub      *runnerserver.Hub
 	clock    *fakeClock
 	auth     *auth.Service
 	recorder *recorder.Recorder
@@ -347,22 +352,28 @@ func newBareHarness(t *testing.T, dir string, maxSandboxes int) *harness {
 	fake := newFakeRunner()
 	clock := &fakeClock{}
 	logger := discardLogger()
+	hub := runnerserver.NewHub(st.Runners, logger)
+	localCapacity := maxSandboxes
+	if localCapacity <= 0 {
+		localCapacity = defaultMaxSandboxes
+	}
 	attempts := attempt.New(attempt.Deps{
 		Store:        st,
-		Runner:       fake,
+		Runners:      runner.NewRegistry(fake, localCapacity, hub),
 		Content:      loaded,
 		Image:        "nsl/node",
-		RunnerID:     "fake",
 		DataDir:      dataDir,
 		MaxSandboxes: maxSandboxes,
 		After:        clock.After,
 		Logger:       logger,
 	})
 	t.Cleanup(attempts.Close)
+	hub.OnDisconnect(attempts.RunnerDisconnected)
+	hub.OnReconnect(attempts.RunnerReconnected)
 
 	checks := checker.New(checker.Deps{
 		Store:    st,
-		Runner:   fake,
+		Runner:   attempts.Runner(),
 		Attempts: attempts,
 		Interval: time.Hour,
 		Logger:   logger,
@@ -373,7 +384,7 @@ func newBareHarness(t *testing.T, dir string, maxSandboxes int) *harness {
 
 	recordings := recorder.New(recorder.Deps{
 		Store:    st,
-		Runner:   fake,
+		Runner:   attempts.Runner(),
 		Attempts: attempts,
 		DataDir:  dataDir,
 		Logger:   logger,
@@ -382,14 +393,14 @@ func newBareHarness(t *testing.T, dir string, maxSandboxes int) *harness {
 
 	sessions := auth.New(st)
 	server := httptest.NewServer(New(Deps{
-		Attempts:     attempts,
-		Content:      loaded,
-		Store:        st,
-		Runner:       fake,
-		Recorder:     recordings,
-		Auth:         sessions,
-		MaxSandboxes: maxSandboxes,
-		Logger:       logger,
+		Attempts: attempts,
+		Content:  loaded,
+		Store:    st,
+		Runner:   attempts.Runner(),
+		Hub:      hub,
+		Recorder: recordings,
+		Auth:     sessions,
+		Logger:   logger,
 	}))
 	t.Cleanup(server.Close)
 
@@ -400,6 +411,7 @@ func newBareHarness(t *testing.T, dir string, maxSandboxes int) *harness {
 		checker:  checks,
 		store:    st,
 		runner:   fake,
+		hub:      hub,
 		clock:    clock,
 		auth:     sessions,
 		recorder: recordings,

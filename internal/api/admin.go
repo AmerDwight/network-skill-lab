@@ -206,12 +206,24 @@ func (s *server) adminStats(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, "", err)
 		return
 	}
+	runners, err := s.runnerList(r.Context())
+	if err != nil {
+		s.fail(w, "", err)
+		return
+	}
+	capacity := 0
+	for _, runner := range runners {
+		if runner.Connected {
+			capacity += runner.Capacity
+		}
+	}
 	writeJSON(w, http.StatusOK, statsJSON{
 		SandboxesActive: active,
-		SandboxesMax:    s.maxSandboxes,
+		SandboxesMax:    capacity,
 		RecordingsBytes: bytes,
 		Attempts:        total,
 		OldestAttemptAt: formatTimePtr(oldest),
+		Runners:         runners,
 	})
 }
 
@@ -232,10 +244,15 @@ func (s *server) failBusy(w http.ResponseWriter, err error) bool {
 	if !errors.As(err, &busy) {
 		return false
 	}
+	loads := make([]runnerLoadJSON, 0, len(busy.Runners))
+	for _, load := range busy.Runners {
+		loads = append(loads, runnerLoadJSON{Name: load.Name, Active: load.Active, Capacity: load.Capacity})
+	}
 	writeJSON(w, http.StatusTooManyRequests, runnerBusyJSON{
 		Error:           errorBody{Code: "runner_busy", Message: err.Error()},
 		SandboxesActive: busy.Active,
 		SandboxesMax:    busy.Max,
+		Runners:         loads,
 	})
 	return true
 }

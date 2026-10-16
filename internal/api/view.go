@@ -93,6 +93,7 @@ type labCheckpoint struct {
 
 type labDetail struct {
 	labSummary
+	Environment string          `json:"environment"`
 	Nodes       []nodeJSON      `json:"nodes"`
 	Checkpoints []labCheckpoint `json:"checkpoints"`
 	TopicTitle  string          `json:"topic_title"`
@@ -121,6 +122,7 @@ type attemptJSON struct {
 	Mode              string             `json:"mode"`
 	Status            string             `json:"status"`
 	ErrorMessage      string             `json:"error_message"`
+	Runner            string             `json:"runner"`
 	Lab               labSummary         `json:"lab"`
 	Ticket            string             `json:"ticket"`
 	Nodes             []nodeJSON         `json:"nodes"`
@@ -174,11 +176,42 @@ type userJSON struct {
 }
 
 type statsJSON struct {
-	SandboxesActive int     `json:"sandboxes_active"`
-	SandboxesMax    int     `json:"sandboxes_max"`
-	RecordingsBytes int64   `json:"recordings_bytes"`
-	Attempts        int     `json:"attempts"`
-	OldestAttemptAt *string `json:"oldest_attempt_at"`
+	SandboxesActive int          `json:"sandboxes_active"`
+	SandboxesMax    int          `json:"sandboxes_max"`
+	RecordingsBytes int64        `json:"recordings_bytes"`
+	Attempts        int          `json:"attempts"`
+	OldestAttemptAt *string      `json:"oldest_attempt_at"`
+	Runners         []runnerJSON `json:"runners"`
+}
+
+type runnerJSON struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Capabilities []string `json:"capabilities"`
+	Capacity     int      `json:"capacity"`
+	Active       int      `json:"active"`
+	Connected    bool     `json:"connected"`
+	LastSeenAt   *string  `json:"last_seen_at"`
+	Version      string   `json:"version"`
+	RevokedAt    *string  `json:"revoked_at"`
+}
+
+type createdRunnerJSON struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Token string `json:"token"`
+}
+
+type runnerSummaryJSON struct {
+	Name         string   `json:"name"`
+	Capabilities []string `json:"capabilities"`
+	Connected    bool     `json:"connected"`
+}
+
+type runnerLoadJSON struct {
+	Name     string `json:"name"`
+	Active   int    `json:"active"`
+	Capacity int    `json:"capacity"`
 }
 
 type attemptUserJSON struct {
@@ -234,9 +267,10 @@ type errorBody struct {
 }
 
 type runnerBusyJSON struct {
-	Error           errorBody `json:"error"`
-	SandboxesActive int       `json:"sandboxes_active"`
-	SandboxesMax    int       `json:"sandboxes_max"`
+	Error           errorBody        `json:"error"`
+	SandboxesActive int              `json:"sandboxes_active"`
+	SandboxesMax    int              `json:"sandboxes_max"`
+	Runners         []runnerLoadJSON `json:"runners"`
 }
 
 func meOf(user store.User) meJSON {
@@ -319,6 +353,7 @@ func (s *server) labDetailOf(lab content.Lab, lang string) labDetail {
 	}
 	return labDetail{
 		labSummary:  s.labSummaryOf(lab, lang),
+		Environment: environmentOf(lab),
 		Nodes:       nodes,
 		Checkpoints: checkpoints,
 		TopicTitle:  topicTitle,
@@ -337,6 +372,7 @@ func (s *server) attemptOf(view attempt.View, lang string) attemptJSON {
 		Mode:              view.Mode,
 		Status:            view.Status,
 		ErrorMessage:      view.ErrorMessage,
+		Runner:            view.Runner,
 		Lab:               s.labSummaryOf(view.Lab, lang),
 		Ticket:            view.Ticket(lang),
 		Nodes:             nodesOf(view),

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { AttemptFailure } from "../components/AttemptFailure";
 import { AttemptPanel } from "../components/AttemptPanel";
 import { ProvisioningPanel } from "../components/ProvisioningPanel";
 import { StatusBar } from "../components/StatusBar";
@@ -91,15 +92,7 @@ export function AttemptPage() {
           />
         ) : null}
 
-        {status === "error" ? (
-          <div className="attempt__error">
-            <h2>{t("attempt.failed")}</h2>
-            <p className="state">{errorMessage}</p>
-            <Link className="button" to="/">
-              {t("action.back")}
-            </Link>
-          </div>
-        ) : null}
+        {status === "error" ? <AttemptFailure message={errorMessage} /> : null}
 
         {status === "running" && attempt !== null ? (
           <TerminalWorkspace attemptId={attemptId} nodes={attempt.nodes} />
@@ -109,6 +102,7 @@ export function AttemptPage() {
       <StatusBar
         status={status}
         elapsedMs={displayedMs}
+        runner={attempt?.runner ?? ""}
         nodes={attempt?.nodes ?? []}
         terminals={terminals}
         eventsConnection={eventsConnection}

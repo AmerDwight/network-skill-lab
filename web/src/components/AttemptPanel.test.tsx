@@ -38,6 +38,7 @@ const getDoc = vi.mocked(client.getDoc);
 const submitAttempt = vi.mocked(client.submitAttempt);
 
 const lab: LabDetail = {
+  environment: "container",
   id: "net-ip-01-link-down",
   title: "Server lost connectivity",
   topic: "net/ip",
@@ -76,6 +77,7 @@ function attemptFor(mode: LabMode): Attempt {
     mode,
     status: "running",
     error_message: "",
+    runner: "local",
     lab,
     ticket: "the server cannot reach the gateway",
     nodes: lab.nodes,

@@ -41,6 +41,7 @@ type View struct {
 	Status        string
 	ErrorMessage  string
 	SandboxID     string
+	Runner        string
 	Lab           content.Lab
 	CaseID        string
 	Seed          *int64
@@ -112,6 +113,7 @@ func newView(att store.Attempt, lab content.Lab, resolved content.Resolved, runs
 		Status:        att.Status,
 		ErrorMessage:  att.ErrorMessage,
 		SandboxID:     att.SandboxID,
+		Runner:        att.RunnerID,
 		Lab:           lab,
 		CaseID:        att.CaseID,
 		Seed:          att.Seed,

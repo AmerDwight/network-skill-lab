@@ -72,12 +72,11 @@ func newK3sStack(t *testing.T) *k3sStack {
 
 	provider := docker.New(cli, docker.Options{Image: k3sNodeImage})
 	attempts := attempt.New(attempt.Deps{
-		Store:    st,
-		Runner:   provider,
-		Content:  loaded,
-		Image:    k3sNodeImage,
-		RunnerID: "docker",
-		Logger:   logger,
+		Store:   st,
+		Runner:  provider,
+		Content: loaded,
+		Image:   k3sNodeImage,
+		Logger:  logger,
 	})
 	t.Cleanup(attempts.Close)
 

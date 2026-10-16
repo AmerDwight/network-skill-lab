@@ -4,12 +4,15 @@ import { encodePathSegments } from "../lib/paths";
 import { notifyUnauthorized } from "./session";
 import type {
   AdminAttempt,
+  AdminRunner,
   AdminStats,
   AdminUser,
   Attempt,
   CommandEntry,
   CommandsQuery,
   CreateAttemptRequest,
+  CreateRunnerRequest,
+  CreatedRunner,
   CreateUserRequest,
   Doc,
   DocSummary,
@@ -25,6 +28,8 @@ import type {
   RecordingInfo,
   Result,
   RunnerBusy,
+  RunnerLoad,
+  RunnerSummary,
   SubmitResult,
   TopicNode,
   Track,
@@ -58,11 +63,31 @@ export function runnerBusyOf(error: unknown): RunnerBusy | null {
   if (!(error instanceof ApiError) || error.code !== "runner_busy") {
     return null;
   }
-  const { sandboxes_active: active, sandboxes_max: max } = error.details;
+  const {
+    sandboxes_active: active,
+    sandboxes_max: max,
+    runners,
+  } = error.details;
   if (typeof active !== "number" || typeof max !== "number") {
     return null;
   }
-  return { sandboxes_active: active, sandboxes_max: max };
+  return {
+    sandboxes_active: active,
+    sandboxes_max: max,
+    runners: Array.isArray(runners) ? runners.filter(isRunnerLoad) : [],
+  };
+}
+
+function isRunnerLoad(value: unknown): value is RunnerLoad {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const { name, active, capacity } = value as Record<string, unknown>;
+  return (
+    typeof name === "string" &&
+    typeof active === "number" &&
+    typeof capacity === "number"
+  );
 }
 
 function query(params: Record<string, string | number | undefined>): string {
@@ -281,6 +306,28 @@ export async function adminAbandon(attemptId: string): Promise<Attempt> {
 
 export async function getAdminStats(): Promise<AdminStats> {
   return json<AdminStats>(await send("/api/admin/stats"));
+}
+
+export async function listRunners(): Promise<AdminRunner[]> {
+  return json<AdminRunner[]>(await send("/api/admin/runners"));
+}
+
+export async function createRunner(
+  input: CreateRunnerRequest,
+): Promise<CreatedRunner> {
+  return json<CreatedRunner>(
+    await send("/api/admin/runners", jsonRequest("POST", input)),
+  );
+}
+
+export async function revokeRunner(id: string): Promise<void> {
+  await send(`/api/admin/runners/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getRunnerSummary(): Promise<RunnerSummary[]> {
+  return json<RunnerSummary[]>(await send("/api/runners/summary"));
 }
 
 export async function adminDeleteAttempt(attemptId: string): Promise<void> {

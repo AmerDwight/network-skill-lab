@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
-import type { LabDetail, LabMode } from "../api/types";
+import { getRunnerSummary } from "../api/client";
+import type { LabDetail, LabEnvironment, LabMode } from "../api/types";
 import { labModes } from "../api/types";
 import { Header } from "../components/Header";
 import { RunnerBusyNotice } from "../components/RunnerBusyNotice";
@@ -44,9 +45,39 @@ function ModeStart({
   );
 }
 
+function useRunnerAvailable(environment: LabEnvironment): boolean {
+  const [available, setAvailable] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getRunnerSummary()
+      .then((runners) => {
+        if (active) {
+          setAvailable(
+            runners.some(
+              (runner) =>
+                runner.connected && runner.capabilities.includes(environment),
+            ),
+          );
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAvailable(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [environment]);
+
+  return available;
+}
+
 function LabView({ lab }: { lab: LabDetail }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const runnerAvailable = useRunnerAvailable(lab.environment);
   const [searchParams] = useSearchParams();
   const preselected = parseMode(searchParams.get("mode"));
   const attempt = useAppStore((state) => state.attempt);
@@ -128,13 +159,22 @@ function LabView({ lab }: { lab: LabDetail }) {
 
       <section className="lab-detail__section">
         <h3 className="lab-detail__heading">{t("lab.modes")}</h3>
+        {runnerAvailable ? null : (
+          <div className="banner banner--error" role="status">
+            <span>
+              {t("lab.noRunner", {
+                environment: t(`env.${lab.environment}`),
+              })}
+            </span>
+          </div>
+        )}
         <ul className="mode-list">
           {lab.modes.map((mode) => (
             <ModeStart
               key={mode}
               mode={mode}
               preselected={preselected === mode}
-              disabled={attempt !== null}
+              disabled={attempt !== null || !runnerAvailable}
               starting={starting?.labId === lab.id && starting.mode === mode}
               onStart={() => void handleStart(mode)}
             />

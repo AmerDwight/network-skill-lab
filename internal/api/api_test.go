@@ -137,7 +137,10 @@ func TestGetLab(t *testing.T) {
 	}
 	body := decodeJSON(t, resp)
 	requireKeys(t, body, "id", "title", "topic", "level", "modes", "estimated_minutes", "related_docs",
-		"has_hidden_checkpoints", "nodes", "checkpoints", "topic_title")
+		"has_hidden_checkpoints", "environment", "nodes", "checkpoints", "topic_title")
+	if body["environment"] != "container" {
+		t.Errorf("environment = %v, want container", body["environment"])
+	}
 
 	nodes := body["nodes"].([]any)
 	if len(nodes) == 0 {
@@ -179,9 +182,12 @@ func TestCreateAttempt(t *testing.T) {
 	}
 	body := decodeJSON(t, resp)
 	requireKeys(t, body,
-		"id", "lab_id", "mode", "status", "error_message", "lab", "ticket", "nodes",
+		"id", "lab_id", "mode", "status", "error_message", "runner", "lab", "ticket", "nodes",
 		"checkpoints", "checkpoints_hidden", "tutorial_steps", "submit_count",
 		"elapsed_ms", "started_at", "ended_at", "server_time", "created_at")
+	if body["runner"] != "local" {
+		t.Errorf("runner = %v, want local", body["runner"])
+	}
 
 	if body["status"] != "provisioning" && body["status"] != "running" {
 		t.Errorf("status = %v", body["status"])

@@ -1,4 +1,10 @@
-export const summary = ({ nodes, checkpoints, topic_title, ...rest }) => rest;
+export const summary = ({
+  nodes,
+  checkpoints,
+  topic_title,
+  environment,
+  ...rest
+}) => rest;
 
 export const health = {
   ok: true,
@@ -41,6 +47,7 @@ export const labs = [
     title: "Server lost connectivity",
     topic: "net/ip",
     topic_title: "IP and links",
+    environment: "container",
     level: 2,
     modes: ["tutorial", "guided", "real"],
     estimated_minutes: 10,
@@ -60,6 +67,7 @@ export const labs = [
     title: "Names no longer resolve",
     topic: "net/dns",
     topic_title: "DNS",
+    environment: "container",
     level: 2,
     modes: ["guided", "real"],
     estimated_minutes: 15,
@@ -73,6 +81,7 @@ export const labs = [
     title: "A pod keeps restarting",
     topic: "k3s/pods",
     topic_title: "Pods",
+    environment: "container",
     level: 2,
     modes: ["tutorial", "guided"],
     estimated_minutes: 20,

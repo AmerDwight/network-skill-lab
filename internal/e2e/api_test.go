@@ -82,7 +82,6 @@ func newStackWith(t *testing.T, cli client.APIClient, maxSandboxes int) *stack {
 		Runner:       provider,
 		Content:      loaded,
 		Image:        testImage,
-		RunnerID:     "docker",
 		DataDir:      dataDir,
 		MaxSandboxes: maxSandboxes,
 		Logger:       logger,
@@ -99,14 +98,13 @@ func newStackWith(t *testing.T, cli client.APIClient, maxSandboxes int) *stack {
 	recordings.Start(t.Context())
 
 	server := httptest.NewServer(api.New(api.Deps{
-		Attempts:     attempts,
-		Content:      loaded,
-		Store:        st,
-		Runner:       provider,
-		Recorder:     recordings,
-		Auth:         auth.New(st),
-		MaxSandboxes: maxSandboxes,
-		Logger:       logger,
+		Attempts: attempts,
+		Content:  loaded,
+		Store:    st,
+		Runner:   provider,
+		Recorder: recordings,
+		Auth:     auth.New(st),
+		Logger:   logger,
 	}))
 	t.Cleanup(server.Close)
 

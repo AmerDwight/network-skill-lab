@@ -104,12 +104,11 @@ func newContentStack(t *testing.T, cli client.APIClient) *contentStack {
 
 	provider := docker.New(cli, docker.Options{Image: contentImage})
 	attempts := attempt.New(attempt.Deps{
-		Store:    st,
-		Runner:   provider,
-		Content:  loaded,
-		Image:    contentImage,
-		RunnerID: "docker",
-		Logger:   logger,
+		Store:   st,
+		Runner:  provider,
+		Content: loaded,
+		Image:   contentImage,
+		Logger:  logger,
 	})
 	t.Cleanup(attempts.Close)
 
