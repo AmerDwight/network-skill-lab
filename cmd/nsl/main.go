@@ -63,6 +63,8 @@ func run(args []string) error {
 		return userCmd(args[1:], os.Stdin, os.Stdout)
 	case "gc":
 		return gcCmd(args[1:])
+	case "prune":
+		return pruneCmd(args[1:], os.Stdout)
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -81,6 +83,7 @@ func usage() {
 commands:
   serve          run the HTTP server
   gc             remove leftover sandboxes of this instance
+  prune          delete finished attempts older than --older-than, with their recordings
   content lint   validate a content directory
   user           manage local accounts: add, passwd, disable, enable, list
   version        print the build version
@@ -225,6 +228,9 @@ func serve(args []string) error {
 	if err := attempts.Recover(ctx); err != nil {
 		return fmt.Errorf("recover attempts: %w", err)
 	}
+	if cfg.PruneAfter > 0 {
+		defer startPruning(ctx, attempts, cfg.PruneAfter, logger)()
+	}
 
 	checks.Start(ctx)
 	recordings.Start(ctx)
@@ -302,9 +308,7 @@ func gcCmd(args []string) error {
 	}
 	defer func() { _ = cli.Close() }()
 
-	if err := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance}).GC(context.Background()); err != nil {
-		return err
-	}
-	fmt.Printf("gc: instance %s is clean\n", cfg.Instance)
-	return nil
+	removed, err := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance}).Collect(context.Background())
+	fmt.Printf("gc: instance %s: removed %d containers and %d networks\n", cfg.Instance, removed.Containers, removed.Networks)
+	return err
 }

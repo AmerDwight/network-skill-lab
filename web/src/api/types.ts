@@ -266,6 +266,7 @@ export interface AdminStats {
   sandboxes_max: number;
   recordings_bytes: number;
   attempts: number;
+  oldest_attempt_at: string | null;
 }
 
 export interface AttemptUser {

@@ -188,6 +188,8 @@
   "admin.stats.sandboxes.value": "{{active}} / {{max}}",
   "admin.stats.recordings": "錄影檔大小",
   "admin.stats.attempts": "attempt 數",
+  "admin.stats.oldest": "最舊紀錄",
+  "admin.stats.oldest.none": "尚無紀錄",
   "admin.attempts.heading": "進行中的 attempt",
   "admin.attempts.loading": "載入 attempt 中",
   "admin.attempts.error": "無法載入 attempt",

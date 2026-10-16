@@ -174,10 +174,11 @@ type userJSON struct {
 }
 
 type statsJSON struct {
-	SandboxesActive int   `json:"sandboxes_active"`
-	SandboxesMax    int   `json:"sandboxes_max"`
-	RecordingsBytes int64 `json:"recordings_bytes"`
-	Attempts        int   `json:"attempts"`
+	SandboxesActive int     `json:"sandboxes_active"`
+	SandboxesMax    int     `json:"sandboxes_max"`
+	RecordingsBytes int64   `json:"recordings_bytes"`
+	Attempts        int     `json:"attempts"`
+	OldestAttemptAt *string `json:"oldest_attempt_at"`
 }
 
 type attemptUserJSON struct {

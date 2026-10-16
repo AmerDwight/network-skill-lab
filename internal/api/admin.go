@@ -201,11 +201,17 @@ func (s *server) adminStats(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, "", err)
 		return
 	}
+	oldest, err := s.store.Attempts.OldestCreatedAt(r.Context())
+	if err != nil {
+		s.fail(w, "", err)
+		return
+	}
 	writeJSON(w, http.StatusOK, statsJSON{
 		SandboxesActive: active,
 		SandboxesMax:    s.maxSandboxes,
 		RecordingsBytes: bytes,
 		Attempts:        total,
+		OldestAttemptAt: formatTimePtr(oldest),
 	})
 }
 

@@ -21,11 +21,16 @@ import (
 
 const (
 	defaultInstance       = "default"
-	networkRemoveAttempts = 5
+	networkRemoveAttempts = 15
 	activeEndpoints       = "has active endpoints"
+	removalInProgress     = "is already in progress"
 )
 
-var networkRemoveBackoff = time.Second
+var (
+	networkRemoveBackoff = time.Second
+	containerGoneTimeout = 15 * time.Second
+	containerGonePoll    = 100 * time.Millisecond
+)
 
 type Options struct {
 	Image          string
@@ -62,49 +67,103 @@ func (p *Provider) log(attempt string) *slog.Logger {
 	return slog.Default().With("attempt", attempt)
 }
 
+type Removed struct {
+	Containers int
+	Networks   int
+}
+
 func (p *Provider) Destroy(ctx context.Context, sb runner.SandboxID) error {
 	log := p.log(string(sb))
-	if err := p.remove(ctx, attemptFilter(string(sb)), log); err != nil {
+	if _, err := p.remove(ctx, attemptFilter(string(sb)), log); err != nil {
 		return fmt.Errorf("destroy sandbox %s: %w", sb, err)
 	}
 	return nil
 }
 
 func (p *Provider) GC(ctx context.Context) error {
-	log := slog.Default().With("instance", p.opts.Instance)
-	if err := p.remove(ctx, instanceFilter(p.opts.Instance), log); err != nil {
-		return fmt.Errorf("gc: %w", err)
-	}
-	return nil
+	_, err := p.Collect(ctx)
+	return err
 }
 
-func (p *Provider) remove(ctx context.Context, f filters.Args, log *slog.Logger) error {
+func (p *Provider) Collect(ctx context.Context) (Removed, error) {
+	log := slog.Default().With("instance", p.opts.Instance)
+	removed, err := p.remove(ctx, instanceFilter(p.opts.Instance), log)
+	if err != nil {
+		return removed, fmt.Errorf("gc: %w", err)
+	}
+	return removed, nil
+}
+
+func (p *Provider) remove(ctx context.Context, f filters.Args, log *slog.Logger) (Removed, error) {
+	var removed Removed
 	containers, err := p.cli.ContainerList(ctx, container.ListOptions{All: true, Filters: f})
 	if err != nil {
-		return fmt.Errorf("list containers: %w", err)
+		return removed, fmt.Errorf("list containers: %w", err)
 	}
-	var errs []error
+	var (
+		errs     []error
+		removing []string
+	)
 	for _, c := range containers {
 		opts := container.RemoveOptions{Force: true, RemoveVolumes: true}
-		if err := p.cli.ContainerRemove(ctx, c.ID, opts); err != nil && !cerrdefs.IsNotFound(err) {
+		err := p.cli.ContainerRemove(ctx, c.ID, opts)
+		switch {
+		case err == nil:
+			removed.Containers++
+			log.Debug("removed container", "container", c.ID)
+		case cerrdefs.IsNotFound(err):
+			continue
+		case !strings.Contains(err.Error(), removalInProgress):
 			errs = append(errs, fmt.Errorf("remove container %s: %w", c.ID, err))
 			continue
 		}
-		log.Debug("removed container", "container", c.ID)
+		removing = append(removing, c.ID)
+	}
+	if err := p.waitGone(ctx, removing); err != nil {
+		if ctx.Err() != nil {
+			return removed, errors.Join(append(errs, err)...)
+		}
+		log.Warn("containers outlived the removal wait", "error", err)
 	}
 
 	networks, err := p.cli.NetworkList(ctx, network.ListOptions{Filters: f})
 	if err != nil {
-		return errors.Join(append(errs, fmt.Errorf("list networks: %w", err))...)
+		return removed, errors.Join(append(errs, fmt.Errorf("list networks: %w", err))...)
 	}
 	for _, n := range networks {
 		if err := p.removeNetwork(ctx, n.ID); err != nil {
 			errs = append(errs, fmt.Errorf("remove network %s: %w", n.ID, err))
 			continue
 		}
+		removed.Networks++
 		log.Debug("removed network", "network", n.ID)
 	}
-	return errors.Join(errs...)
+	return removed, errors.Join(errs...)
+}
+
+// waitGone polls until the daemon no longer knows the containers: a forced
+// ContainerRemove can return while the container is still being torn down, and
+// its network endpoints stay attached until it is.
+func (p *Provider) waitGone(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, containerGoneTimeout)
+	defer cancel()
+	for _, id := range ids {
+		for {
+			_, err := p.cli.ContainerInspect(ctx, id)
+			if cerrdefs.IsNotFound(err) {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("container %s still present: %w", id, ctx.Err())
+			case <-time.After(containerGonePoll):
+			}
+		}
+	}
+	return nil
 }
 
 // removeNetwork retries while the daemon still sees endpoints: containers that were

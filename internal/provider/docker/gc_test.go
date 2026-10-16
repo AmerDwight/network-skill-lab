@@ -3,9 +3,11 @@ package docker
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
@@ -37,9 +39,9 @@ func (c *stubClient) NetworkRemove(context.Context, string) error {
 
 func fastBackoff(t *testing.T) {
 	t.Helper()
-	previous := networkRemoveBackoff
-	networkRemoveBackoff = time.Millisecond
-	t.Cleanup(func() { networkRemoveBackoff = previous })
+	previousBackoff, previousPoll := networkRemoveBackoff, containerGonePoll
+	networkRemoveBackoff, containerGonePoll = time.Millisecond, time.Millisecond
+	t.Cleanup(func() { networkRemoveBackoff, containerGonePoll = previousBackoff, previousPoll })
 }
 
 func TestGCRetriesWhileANetworkStillHasEndpoints(t *testing.T) {
@@ -98,4 +100,118 @@ func (c *recordingClient) ContainerList(_ context.Context, opts container.ListOp
 func (c *recordingClient) NetworkList(_ context.Context, opts network.ListOptions) ([]network.Summary, error) {
 	c.networkFilter = opts.Filters
 	return nil, nil
+}
+
+type teardownClient struct {
+	client.APIClient
+	removeErr  error
+	lingers    int
+	inspects   int
+	events     []string
+	containers []container.Summary
+	networks   []network.Summary
+}
+
+func (c *teardownClient) ContainerList(context.Context, container.ListOptions) ([]container.Summary, error) {
+	return c.containers, nil
+}
+
+func (c *teardownClient) ContainerRemove(_ context.Context, id string, _ container.RemoveOptions) error {
+	c.events = append(c.events, "remove "+id)
+	return c.removeErr
+}
+
+func (c *teardownClient) ContainerInspect(_ context.Context, id string) (container.InspectResponse, error) {
+	c.inspects++
+	if c.inspects <= c.lingers {
+		return container.InspectResponse{}, nil
+	}
+	c.events = append(c.events, "gone "+id)
+	return container.InspectResponse{}, cerrdefs.ErrNotFound
+}
+
+func (c *teardownClient) NetworkList(context.Context, network.ListOptions) ([]network.Summary, error) {
+	return c.networks, nil
+}
+
+func (c *teardownClient) NetworkRemove(_ context.Context, id string) error {
+	c.events = append(c.events, "remove "+id)
+	return nil
+}
+
+func TestDestroyWaitsForContainersBeforeRemovingNetworks(t *testing.T) {
+	fastBackoff(t)
+	cli := &teardownClient{
+		lingers:    3,
+		containers: []container.Summary{{ID: "c1"}},
+		networks:   []network.Summary{{ID: "net1"}},
+	}
+	p := New(cli, Options{Instance: "inst1"})
+
+	if err := p.Destroy(t.Context(), "att1"); err != nil {
+		t.Fatalf("Destroy() error = %v", err)
+	}
+	want := []string{"remove c1", "gone c1", "remove net1"}
+	if !slices.Equal(cli.events, want) {
+		t.Errorf("events = %v, want %v", cli.events, want)
+	}
+	if cli.inspects != 4 {
+		t.Errorf("ContainerInspect called %d times, want 4", cli.inspects)
+	}
+}
+
+func TestDestroyWaitsOutARemovalAlreadyInProgress(t *testing.T) {
+	fastBackoff(t)
+	cli := &teardownClient{
+		removeErr:  errors.New("Error response from daemon: removal of container c1 is already in progress"),
+		lingers:    1,
+		containers: []container.Summary{{ID: "c1"}},
+		networks:   []network.Summary{{ID: "net1"}},
+	}
+	p := New(cli, Options{Instance: "inst1"})
+
+	if err := p.Destroy(t.Context(), "att1"); err != nil {
+		t.Fatalf("Destroy() error = %v", err)
+	}
+	want := []string{"remove c1", "gone c1", "remove net1"}
+	if !slices.Equal(cli.events, want) {
+		t.Errorf("events = %v, want %v", cli.events, want)
+	}
+}
+
+func TestDestroyGivesUpWaitingAfterTheTimeout(t *testing.T) {
+	fastBackoff(t)
+	previous := containerGoneTimeout
+	containerGoneTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { containerGoneTimeout = previous })
+	cli := &teardownClient{
+		lingers:    1 << 30,
+		containers: []container.Summary{{ID: "c1"}},
+		networks:   []network.Summary{{ID: "net1"}},
+	}
+	p := New(cli, Options{Instance: "inst1"})
+
+	if err := p.Destroy(t.Context(), "att1"); err != nil {
+		t.Fatalf("Destroy() error = %v", err)
+	}
+	if want := []string{"remove c1", "remove net1"}; !slices.Equal(cli.events, want) {
+		t.Errorf("events = %v, want %v", cli.events, want)
+	}
+}
+
+func TestCollectCountsWhatItRemoved(t *testing.T) {
+	fastBackoff(t)
+	cli := &teardownClient{
+		containers: []container.Summary{{ID: "c1"}, {ID: "c2"}},
+		networks:   []network.Summary{{ID: "net1"}, {ID: "net2"}, {ID: "net3"}},
+	}
+	p := New(cli, Options{Instance: "inst1"})
+
+	removed, err := p.Collect(t.Context())
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if removed != (Removed{Containers: 2, Networks: 3}) {
+		t.Errorf("Collect() = %+v, want 2 containers and 3 networks", removed)
+	}
 }

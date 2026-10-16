@@ -86,24 +86,7 @@ func (a *Attempts) ListByUser(ctx context.Context, userID string, before time.Ti
 	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
 	args = append(args, limit)
 
-	rows, err := a.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list attempts of user %s: %w", userID, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var attempts []Attempt
-	for rows.Next() {
-		attempt, err := scanAttempt(rows.Scan)
-		if err != nil {
-			return nil, fmt.Errorf("list attempts of user %s: %w", userID, err)
-		}
-		attempts = append(attempts, attempt)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list attempts of user %s: %w", userID, err)
-	}
-	return attempts, nil
+	return a.query(ctx, "list attempts of user "+userID, query, args...)
 }
 
 func (a *Attempts) CountActive(ctx context.Context) (int, error) {
@@ -136,13 +119,37 @@ func (a *Attempts) Delete(ctx context.Context, id string) error {
 }
 
 func (a *Attempts) ListNonTerminal(ctx context.Context) ([]Attempt, error) {
-	rows, err := a.db.QueryContext(ctx,
+	return a.query(ctx, "list non-terminal attempts",
 		`SELECT `+attemptColumns+` FROM attempts
 		WHERE status IN (?, ?)
 		ORDER BY created_at, id`,
 		StatusProvisioning, StatusRunning)
+}
+
+func (a *Attempts) ListTerminalEndedBefore(ctx context.Context, before time.Time, limit int) ([]Attempt, error) {
+	return a.query(ctx, "list attempts ended before "+formatTime(before),
+		`SELECT `+attemptColumns+` FROM attempts
+		WHERE status NOT IN (?, ?) AND ended_at IS NOT NULL AND ended_at < ?
+		ORDER BY ended_at, id LIMIT ?`,
+		StatusProvisioning, StatusRunning, formatTime(before), limit)
+}
+
+func (a *Attempts) OldestCreatedAt(ctx context.Context) (*time.Time, error) {
+	var oldest sql.NullString
+	if err := a.db.QueryRowContext(ctx, `SELECT MIN(created_at) FROM attempts`).Scan(&oldest); err != nil {
+		return nil, fmt.Errorf("oldest attempt: %w", err)
+	}
+	t, err := scanNullTime(oldest)
 	if err != nil {
-		return nil, fmt.Errorf("list non-terminal attempts: %w", err)
+		return nil, fmt.Errorf("oldest attempt: %w", err)
+	}
+	return t, nil
+}
+
+func (a *Attempts) query(ctx context.Context, op, query string, args ...any) ([]Attempt, error) {
+	rows, err := a.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -150,12 +157,12 @@ func (a *Attempts) ListNonTerminal(ctx context.Context) ([]Attempt, error) {
 	for rows.Next() {
 		attempt, err := scanAttempt(rows.Scan)
 		if err != nil {
-			return nil, fmt.Errorf("list non-terminal attempts: %w", err)
+			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		attempts = append(attempts, attempt)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list non-terminal attempts: %w", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	return attempts, nil
 }

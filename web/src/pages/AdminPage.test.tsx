@@ -126,6 +126,7 @@ beforeEach(async () => {
     sandboxes_max: 3,
     recordings_bytes: 734003200,
     attempts: 12,
+    oldest_attempt_at: "2026-08-02T09:15:00.000Z",
   });
 });
 
@@ -154,8 +155,26 @@ describe("AdminPage", () => {
     expect(screen.getByText("1 / 3")).toBeDefined();
     expect(screen.getByText("700.0 MB")).toBeDefined();
     expect(
+      screen.getByText(
+        new Date("2026-08-02T09:15:00.000Z").toLocaleDateString(),
+      ),
+    ).toBeDefined();
+    expect(
       screen.getByRole("cell", { name: "Server lost connectivity" }),
     ).toBeDefined();
+  });
+
+  it("says there is no oldest record before any attempt", async () => {
+    getAdminStats.mockResolvedValue({
+      sandboxes_active: 0,
+      sandboxes_max: 3,
+      recordings_bytes: 0,
+      attempts: 0,
+      oldest_attempt_at: null,
+    });
+    renderPage();
+
+    expect(await screen.findByText("None yet")).toBeDefined();
   });
 
   it("leaves the admin no way to change its own account", async () => {

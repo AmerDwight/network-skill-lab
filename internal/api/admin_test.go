@@ -119,12 +119,28 @@ func TestAdminDisableDropsTheUsersSessions(t *testing.T) {
 	requireError(t, resp, http.StatusUnauthorized, "unauthorized")
 }
 
-func TestAdminStats(t *testing.T) {
+func TestAdminStatsOldestAttemptIsNullWithoutAttempts(t *testing.T) {
 	h := newHarness(t)
-	h.running()
 
 	body := decodeJSON(t, h.send(h.adminClient(), http.MethodGet, "/api/admin/stats", ""))
-	requireKeys(t, body, "sandboxes_active", "sandboxes_max", "recordings_bytes", "attempts")
+	if v, ok := body["oldest_attempt_at"]; !ok || v != nil {
+		t.Errorf("oldest_attempt_at = %v (present %v), want null", v, ok)
+	}
+}
+
+func TestAdminStats(t *testing.T) {
+	h := newHarness(t)
+	id := h.running()
+	att, err := h.store.Attempts.Get(t.Context(), id)
+	if err != nil {
+		t.Fatalf("get attempt: %v", err)
+	}
+
+	body := decodeJSON(t, h.send(h.adminClient(), http.MethodGet, "/api/admin/stats", ""))
+	requireKeys(t, body, "sandboxes_active", "sandboxes_max", "recordings_bytes", "attempts", "oldest_attempt_at")
+	if body["oldest_attempt_at"] != formatTime(att.CreatedAt) {
+		t.Errorf("oldest_attempt_at = %v, want %s", body["oldest_attempt_at"], formatTime(att.CreatedAt))
+	}
 	if body["sandboxes_active"] != float64(1) {
 		t.Errorf("sandboxes_active = %v, want 1", body["sandboxes_active"])
 	}

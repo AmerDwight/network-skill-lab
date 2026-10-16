@@ -149,7 +149,12 @@ const routes = [
     "GET",
     /^\/api\/admin\/stats$/,
     () => ({
-      body: { ...sandboxStats(), recordings_bytes: 734003200, attempts: 12 },
+      body: {
+        ...sandboxStats(),
+        recordings_bytes: 734003200,
+        attempts: 12,
+        oldest_attempt_at: "2026-08-02T09:15:00.000Z",
+      },
     }),
   ],
   ["GET", /^\/api\/health$/, () => ({ body: health })],

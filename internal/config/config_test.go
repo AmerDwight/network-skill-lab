@@ -11,7 +11,7 @@ func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{
 		"NSL_LISTEN", "NSL_DATA_DIR", "NSL_CONTENT_DIR", "NSL_NODE_IMAGE",
 		"NSL_INSTANCE", "NSL_IDLE_TIMEOUT", "NSL_CHECK_INTERVAL", "NSL_SYSTEMD_TIMEOUT",
-		"NSL_MAX_SANDBOXES", "NSL_LOG_LEVEL",
+		"NSL_MAX_SANDBOXES", "NSL_PRUNE_AFTER", "NSL_LOG_LEVEL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -48,6 +48,7 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("NSL_CHECK_INTERVAL", "2s")
 	t.Setenv("NSL_SYSTEMD_TIMEOUT", "90s")
 	t.Setenv("NSL_MAX_SANDBOXES", "5")
+	t.Setenv("NSL_PRUNE_AFTER", "30d")
 	t.Setenv("NSL_LOG_LEVEL", "debug")
 
 	got, err := Load()
@@ -65,6 +66,7 @@ func TestLoadFromEnv(t *testing.T) {
 		CheckInterval:  2 * time.Second,
 		SystemdTimeout: 90 * time.Second,
 		MaxSandboxes:   5,
+		PruneAfter:     30 * 24 * time.Hour,
 		LogLevel:       slog.LevelDebug,
 	}
 	if got != want {
@@ -86,6 +88,8 @@ func TestLoadInvalid(t *testing.T) {
 		{"max sandboxes not a number", "NSL_MAX_SANDBOXES", "many"},
 		{"max sandboxes not positive", "NSL_MAX_SANDBOXES", "0"},
 		{"log level unknown", "NSL_LOG_LEVEL", "verbose"},
+		{"prune after not a duration", "NSL_PRUNE_AFTER", "monthly"},
+		{"prune after not positive", "NSL_PRUNE_AFTER", "0d"},
 	}
 
 	for _, tt := range tests {
@@ -108,5 +112,34 @@ func TestInstanceIDFollowsTheDataDir(t *testing.T) {
 	}
 	if got := instanceID(dir); len(got) != 8 {
 		t.Errorf("instanceID = %q, want 8 hex characters", got)
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	valid := map[string]time.Duration{
+		"30d":    30 * 24 * time.Hour,
+		"1d12h":  36 * time.Hour,
+		"0d":     0,
+		"720h":   720 * time.Hour,
+		"90m":    90 * time.Minute,
+		"2d30m":  48*time.Hour + 30*time.Minute,
+		"1.5h":   90 * time.Minute,
+		"1d1h1s": 25*time.Hour + time.Second,
+	}
+	for in, want := range valid {
+		got, err := ParseDuration(in)
+		if err != nil {
+			t.Errorf("ParseDuration(%q) error = %v", in, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("ParseDuration(%q) = %v, want %v", in, got, want)
+		}
+	}
+
+	for _, in := range []string{"", "d", "-1d", "1.5d", "xd", "1dd", "1d-1h", "30", "1h2d"} {
+		if got, err := ParseDuration(in); err == nil {
+			t.Errorf("ParseDuration(%q) = %v, want an error", in, got)
+		}
 	}
 }

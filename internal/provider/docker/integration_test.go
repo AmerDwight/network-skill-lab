@@ -415,6 +415,28 @@ func TestGCSurvivesANetworkThatStillHasEndpoints(t *testing.T) {
 	assertNothingLeft(t, cli, attemptFilter(attempt))
 }
 
+func TestDestroyLeavesNoNetworkBehind(t *testing.T) {
+	p, cli := newProvider(t)
+	attempt := attemptID(t)
+	spec, _ := fixtureSpec(t, attempt)
+	t.Cleanup(func() {
+		if err := p.Destroy(context.WithoutCancel(t.Context()), runner.SandboxID(attempt)); err != nil {
+			t.Errorf("cleanup: %v", err)
+		}
+	})
+	sb, err := p.Provision(t.Context(), spec)
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+
+	start := time.Now()
+	if err := p.Destroy(t.Context(), sb); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+	t.Logf("destroy took %s", time.Since(start).Round(time.Millisecond))
+	assertNothingLeft(t, cli, attemptFilter(attempt))
+}
+
 func TestHealth(t *testing.T) {
 	p, _ := newProvider(t)
 	health := p.Health(t.Context())
