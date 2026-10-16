@@ -28,9 +28,10 @@ const (
 )
 
 var (
-	allowedModes = []string{tutorialMode, "guided", "real"}
-	allowedRoles = []string{"ubuntu", "ubuntu-nm", k3sServerRole, "k3s-agent"}
-	allowedGens  = []string{GenConst, GenCIDR, GenIPIn, GenChoice, GenInt}
+	allowedModes        = []string{tutorialMode, "guided", "real"}
+	allowedEnvironments = []string{"container", "vm"}
+	allowedRoles        = []string{"ubuntu", "ubuntu-nm", k3sServerRole, "k3s-agent"}
+	allowedGens         = []string{GenConst, GenCIDR, GenIPIn, GenChoice, GenInt}
 )
 
 var checks = []func(*Lab) []error{
@@ -119,8 +120,8 @@ func checkModes(lab *Lab) []error {
 }
 
 func checkEnvironment(lab *Lab) []error {
-	if lab.Environment != "container" {
-		return []error{labErrf(lab, "environment", "must be \"container\", got %q", lab.Environment)}
+	if !slices.Contains(allowedEnvironments, lab.Environment) {
+		return []error{labErrf(lab, "environment", "must be one of %v, got %q", allowedEnvironments, lab.Environment)}
 	}
 	return nil
 }

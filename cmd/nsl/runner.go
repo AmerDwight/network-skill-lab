@@ -15,6 +15,8 @@ import (
 
 	"github.com/AmerDwight/network-skill-lab/internal/config"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
+	"github.com/AmerDwight/network-skill-lab/internal/provider/vm"
+	"github.com/AmerDwight/network-skill-lab/internal/runner"
 	"github.com/AmerDwight/network-skill-lab/internal/runnerclient"
 	"github.com/AmerDwight/network-skill-lab/internal/runnerserver"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
@@ -27,10 +29,12 @@ func runnerUsage() {
 	fmt.Fprint(os.Stderr, `usage: nsl runner <command>
 
 commands:
-  --url <ws(s)://host/ws/runner> --name <name> [--max-sandboxes 3] [--provider docker]
+  --url <ws(s)://host/ws/runner> --name <name> [--max-sandboxes 3] [--provider docker|vm]
         [--instance <id>] [--token-file <path>]
                     connect to a control plane and run sandboxes on this host;
-                    the token comes from --token-file or `+runnerTokenEnv+`
+                    the token comes from --token-file or `+runnerTokenEnv+`;
+                    --provider vm reads NSL_VM_IMAGE, NSL_VM_DIR, NSL_VM_MGMT_NETWORK,
+                    NSL_VM_MEMORY_MIB, NSL_VM_VCPUS and NSL_VM_BOOT_TIMEOUT
   token <name> [--capabilities container] [--capacity 3]
                     register a runner and print its token once
   revoke <name>     reject the runner's token from now on
@@ -60,8 +64,8 @@ func runnerServe(args []string) error {
 	url := flags.String("url", "", "control plane runner endpoint, e.g. wss://host/ws/runner")
 	name := flags.String("name", "", "runner name, as registered with `nsl runner token`")
 	maxSandboxes := flags.Int("max-sandboxes", 3, "how many sandboxes this runner accepts at once")
-	providerName := flags.String("provider", "docker", "sandbox provider: docker")
-	instance := flags.String("instance", "", "Docker label that scopes garbage collection (default: the runner name)")
+	providerName := flags.String("provider", "docker", "sandbox provider: docker or vm")
+	instance := flags.String("instance", "", "label that scopes garbage collection (default: the runner name)")
 	tokenFile := flags.String("token-file", "", "file holding the runner token (default: $"+runnerTokenEnv+")")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -77,8 +81,8 @@ func runnerServe(args []string) error {
 	if *maxSandboxes < 1 {
 		return fmt.Errorf("--max-sandboxes must be at least 1, got %d", *maxSandboxes)
 	}
-	if *providerName != "docker" {
-		return fmt.Errorf("unknown provider %q, want docker", *providerName)
+	if *providerName != "docker" && *providerName != "vm" {
+		return fmt.Errorf("unknown provider %q, want docker or vm", *providerName)
 	}
 	if *instance == "" {
 		*instance = *name
@@ -95,25 +99,49 @@ func runnerServe(args []string) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 	slog.SetDefault(logger)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	provider, closeProvider, err := newRunnerProvider(*providerName, *instance, cfg, logger)
 	if err != nil {
-		return fmt.Errorf("create docker client: %w", err)
+		return err
 	}
-	defer func() { _ = cli.Close() }()
+	defer closeProvider()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("runner starting", "url", *url, "name", *name, "instance", *instance, "max_sandboxes", *maxSandboxes, "version", version)
+	logger.Info("runner starting", "url", *url, "name", *name, "provider", *providerName, "instance", *instance, "max_sandboxes", *maxSandboxes, "version", version)
 	return runnerclient.Run(ctx, runnerclient.Options{
 		URL:      *url,
 		Token:    token,
 		Name:     *name,
 		Capacity: *maxSandboxes,
 		Version:  version,
-		Provider: docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: *instance, SystemdTimeout: cfg.SystemdTimeout}),
+		Provider: provider,
 		Logger:   logger,
 	})
+}
+
+func newRunnerProvider(name, instance string, cfg config.Config, logger *slog.Logger) (runner.Runner, func(), error) {
+	if name == "vm" {
+		p, err := vm.New(vm.Config{
+			Image:       cfg.VM.Image,
+			Dir:         cfg.VM.Dir,
+			MgmtNetwork: cfg.VM.MgmtNetwork,
+			MemoryMiB:   cfg.VM.MemoryMiB,
+			VCPUs:       cfg.VM.VCPUs,
+			BootTimeout: cfg.VM.BootTimeout,
+			Instance:    instance,
+		}, logger)
+		if err != nil {
+			return nil, nil, fmt.Errorf("vm provider: %w", err)
+		}
+		return p, func() {}, nil
+	}
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, nil, fmt.Errorf("create docker client: %w", err)
+	}
+	p := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: instance, SystemdTimeout: cfg.SystemdTimeout})
+	return p, func() { _ = cli.Close() }, nil
 }
 
 func readRunnerToken(path string) (string, error) {

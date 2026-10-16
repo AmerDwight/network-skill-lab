@@ -79,7 +79,7 @@ func TestRunnerServeValidatesFlags(t *testing.T) {
 	cases := map[string][]string{
 		"missing url":       {"--name", "lab-01"},
 		"missing name":      {"--url", "ws://x/ws/runner"},
-		"bad provider":      {"--url", "ws://x", "--name", "lab-01", "--provider", "vm"},
+		"bad provider":      {"--url", "ws://x", "--name", "lab-01", "--provider", "kvm"},
 		"zero capacity":     {"--url", "ws://x", "--name", "lab-01", "--max-sandboxes", "0"},
 		"no token":          {"--url", "ws://x", "--name", "lab-01"},
 		"missing tokenfile": {"--url", "ws://x", "--name", "lab-01", "--token-file", filepath.Join(t.TempDir(), "none")},
@@ -90,6 +90,15 @@ func TestRunnerServeValidatesFlags(t *testing.T) {
 				t.Errorf("runner %v succeeded", args)
 			}
 		})
+	}
+}
+
+func TestRunnerServeVMNeedsAnImage(t *testing.T) {
+	t.Setenv(runnerTokenEnv, "secret")
+	t.Setenv("NSL_VM_IMAGE", "")
+	_, err := runRunner(t, "--url", "ws://x", "--name", "vm-01", "--provider", "vm")
+	if err == nil || !strings.Contains(err.Error(), "NSL_VM_IMAGE is required") {
+		t.Errorf("runner --provider vm without an image error = %v", err)
 	}
 }
 

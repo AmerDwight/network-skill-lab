@@ -146,7 +146,7 @@ func (p *Provider) createContainers(ctx context.Context, spec runner.SandboxSpec
 			Tmpfs:        map[string]string{"/run": "", "/run/lock": "", "/tmp": ""},
 			Resources:    container.Resources{Memory: p.opts.MemLimit},
 		}
-		if isK3sRole(node.Role) {
+		if runner.IsK3sRole(node.Role) {
 			hostConfig.Mounts = []mount.Mount{{Type: mount.TypeVolume, Target: k3sContainerdDir}}
 		}
 		networkConfig := &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{mgmt: {}}}
@@ -277,10 +277,8 @@ func (p *Provider) bootstrap(ctx context.Context, spec runner.SandboxSpec, log *
 	if err != nil {
 		return err
 	}
-	server := k3sServerAddress(spec)
-
 	return forEachNode(spec.Nodes, func(node runner.NodeSpec) error {
-		env := bootstrapEnv(spec, node, token, server)
+		env := spec.BootstrapEnv(node, token)
 		name := containerName(spec.AttemptID, node.Name)
 		result, err := p.exec(ctx, name, []string{bootstrapPath}, runner.ExecOptions{Env: env, Timeout: bootstrapTimeout})
 		if err != nil {
@@ -292,22 +290,6 @@ func (p *Provider) bootstrap(ctx context.Context, spec runner.SandboxSpec, log *
 		log.Debug("bootstrapped node", "node", node.Name, "ifaces", env["NSL_IFACES"])
 		return nil
 	})
-}
-
-func bootstrapEnv(spec runner.SandboxSpec, node runner.NodeSpec, token, server string) map[string]string {
-	env := map[string]string{
-		"NSL_NODE":   node.Name,
-		"NSL_ROLE":   node.Role,
-		"NSL_IFACES": spec.IfacesEnv(node.Name),
-	}
-	if isK3sRole(node.Role) {
-		env["NSL_K3S_TOKEN"] = token
-		env["NSL_K3S_SERVER"] = server
-	}
-	if node.Role == runner.RoleK3sServer {
-		env["NSL_K3S_DISABLE"] = strings.Join(node.K3sDisable, ",")
-	}
-	return env
 }
 
 func (p *Provider) waitK3sReady(ctx context.Context, spec runner.SandboxSpec, names []string, log *slog.Logger) error {
@@ -414,14 +396,10 @@ func forEachNode(nodes []runner.NodeSpec, fn func(runner.NodeSpec) error) error 
 	return errors.Join(errs...)
 }
 
-func isK3sRole(role string) bool {
-	return role == runner.RoleK3sServer || role == "k3s-agent"
-}
-
 func k3sNodeNames(spec runner.SandboxSpec) []string {
 	var names []string
 	for _, node := range spec.Nodes {
-		if isK3sRole(node.Role) {
+		if runner.IsK3sRole(node.Role) {
 			names = append(names, node.Name)
 		}
 	}
@@ -433,23 +411,6 @@ func k3sServerNode(spec runner.SandboxSpec) string {
 		if node.Role == runner.RoleK3sServer {
 			return node.Name
 		}
-	}
-	return ""
-}
-
-func k3sServerAddress(spec runner.SandboxSpec) string {
-	for _, node := range spec.Nodes {
-		if node.Role != "k3s-server" {
-			continue
-		}
-		ifaces := spec.IfacesEnv(node.Name)
-		if ifaces == "" {
-			return ""
-		}
-		first, _, _ := strings.Cut(ifaces, ",")
-		_, address, _ := strings.Cut(first, "=")
-		address, _, _ = strings.Cut(address, "/")
-		return address
 	}
 	return ""
 }

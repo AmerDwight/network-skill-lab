@@ -40,6 +40,7 @@ make dev               # Vite dev server + go run ./cmd/nsl serve
 make lint              # golangci-lint, eslint, prettier, tsc
 make test              # go test ./... and vitest
 make test-integration  # Docker integration tests, needs a Docker daemon
+make test-vm           # VM provider integration tests, needs KVM, libvirt and NSL_VM_IMAGE
 ```
 
 `VITE_API_TARGET` points the Vite dev server at a different backend (default
@@ -84,6 +85,54 @@ Garbage collection only touches resources labelled with the process's own
 instance id, which is derived from the absolute data dir, or taken from
 `NSL_INSTANCE`; `/api/health` reports it as `instance`. `nsl gc` removes the
 leftover sandboxes of that instance by hand.
+
+## VM runner
+
+Labs with `environment: vm` run on a remote runner started with
+`nsl runner --provider vm`. Each node is a KVM virtual machine booted from a
+copy-on-write overlay of one base image; commands and checkpoints run through
+the QEMU guest agent and the terminal is an SSH session on the management
+network.
+
+Host requirements:
+
+- `/dev/kvm` (on WSL2, `nestedVirtualization=true` in `.wslconfig`), libvirt
+  with QEMU, `qemu-img` and `genisoimage`.
+- The runner's user in the `libvirt` group: the provider calls
+  `virsh -c qemu:///system`.
+- The libvirt network `default` (NAT) for management, or another one named by
+  `NSL_VM_MGMT_NETWORK`.
+- The image and the work dir where QEMU can read them: QEMU runs as
+  `libvirt-qemu`, so neither may sit under a home directory, every directory
+  above the image must be `o+x` and the work dir must be `o+rx`. The runner
+  refuses to start otherwise.
+
+Build the base image once (3 to 11 minutes, mostly package downloads):
+
+```sh
+NSL_VM_IMAGE_DIR=/var/lib/nsl/images images/vm/build.sh
+sudo mkdir -p /var/lib/nsl/vm && sudo chown "$USER" /var/lib/nsl/vm && chmod o+rx /var/lib/nsl/vm
+```
+
+Then start the runner:
+
+```sh
+NSL_VM_IMAGE=/var/lib/nsl/images/nsl-node.qcow2 \
+  nsl runner --provider vm --url wss://lab.example.com/ws/runner --name vm-01 --token-file vm-01.token
+```
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NSL_VM_IMAGE` | (required) | Path to `nsl-node.qcow2` |
+| `NSL_VM_DIR` | `/var/lib/nsl/vm` | Overlays, seed ISOs, SSH keys and serial logs, one directory per sandbox |
+| `NSL_VM_MGMT_NETWORK` | `default` | libvirt network for the management interface `eth0` |
+| `NSL_VM_MEMORY_MIB` | `1024` | Memory per VM |
+| `NSL_VM_VCPUS` | `1` | vCPUs per VM |
+| `NSL_VM_BOOT_TIMEOUT` | `120s` | How long provisioning waits for the guest agent |
+
+A two-node lab starts in about 50 seconds and each VM takes about 600 MB of
+host memory, so size `--max-sandboxes` accordingly. `make test-vm` runs the VM
+integration tests when `NSL_VM_IMAGE` is set.
 
 ## Configuration
 

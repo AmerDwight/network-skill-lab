@@ -145,8 +145,8 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:   "unsupported environment",
-			mutate: func(f *fixture) { f.replace("lab", "environment: container", "environment: vm") },
-			want:   `environment: must be "container", got "vm"`,
+			mutate: func(f *fixture) { f.replace("lab", "environment: container", "environment: wasm") },
+			want:   `environment: must be one of [container vm], got "wasm"`,
 		},
 		{
 			name:   "level out of range",
@@ -306,12 +306,12 @@ func TestValidateReportsEveryError(t *testing.T) {
 	f := newFixture()
 	f.replace("lab", "version: 1", "version: 3")
 	f.replace("lab", "level: 2", "level: 9")
-	f.replace("lab", "environment: container", "environment: vm")
+	f.replace("lab", "environment: container", "environment: wasm")
 	_, err := Load(f.write(t))
 	if err == nil {
 		t.Fatal("Load() succeeded, want errors")
 	}
-	for _, want := range []string{"version: must be 1", "level: must be between 1 and 5", `environment: must be "container"`} {
+	for _, want := range []string{"version: must be 1", "level: must be between 1 and 5", `environment: must be one of`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Load() error = %v, want it to contain %q", err, want)
 		}
@@ -325,5 +325,17 @@ func TestValidateAcceptsFixture(t *testing.T) {
 	}
 	if len(labs) != 1 {
 		t.Fatalf("Load() returned %d labs, want 1", len(labs))
+	}
+}
+
+func TestValidateAcceptsVMEnvironment(t *testing.T) {
+	f := newFixture()
+	f.replace("lab", "environment: container", "environment: vm")
+	labs, err := Load(f.write(t))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if labs[0].Environment != "vm" {
+		t.Errorf("Environment = %q, want vm", labs[0].Environment)
 	}
 }

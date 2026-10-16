@@ -1,0 +1,5 @@
+- id: net
+  title: { zh: "網路", en: "Networking" }
+  children:
+    - id: ip
+      title: { zh: "介面與路由 (ip / ifconfig / route)", en: "Interfaces & routing" }
