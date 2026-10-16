@@ -12,6 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 		"NSL_LISTEN", "NSL_DATA_DIR", "NSL_CONTENT_DIR", "NSL_NODE_IMAGE",
 		"NSL_INSTANCE", "NSL_IDLE_TIMEOUT", "NSL_CHECK_INTERVAL", "NSL_SYSTEMD_TIMEOUT",
 		"NSL_MAX_SANDBOXES", "NSL_PRUNE_AFTER", "NSL_LOG_LEVEL",
+		"NSL_VM_IMAGE", "NSL_VM_DIR", "NSL_VM_MGMT_NETWORK", "NSL_VM_MEMORY_MIB", "NSL_VM_VCPUS", "NSL_VM_BOOT_TIMEOUT",
 	} {
 		t.Setenv(key, "")
 	}
@@ -32,6 +33,13 @@ func TestLoadDefaults(t *testing.T) {
 		SystemdTimeout: 60 * time.Second,
 		MaxSandboxes:   3,
 		LogLevel:       slog.LevelInfo,
+		VM: VM{
+			Dir:         "/var/lib/nsl/vm",
+			MgmtNetwork: "default",
+			MemoryMiB:   1024,
+			VCPUs:       1,
+			BootTimeout: 120 * time.Second,
+		},
 	}
 	if got != want {
 		t.Errorf("Load() = %+v, want %+v", got, want)
@@ -50,6 +58,12 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("NSL_MAX_SANDBOXES", "5")
 	t.Setenv("NSL_PRUNE_AFTER", "30d")
 	t.Setenv("NSL_LOG_LEVEL", "debug")
+	t.Setenv("NSL_VM_IMAGE", "/var/tmp/nsl-node.qcow2")
+	t.Setenv("NSL_VM_DIR", "/var/tmp/nsl-vm")
+	t.Setenv("NSL_VM_MGMT_NETWORK", "nsl-mgmt")
+	t.Setenv("NSL_VM_MEMORY_MIB", "768")
+	t.Setenv("NSL_VM_VCPUS", "2")
+	t.Setenv("NSL_VM_BOOT_TIMEOUT", "3m")
 
 	got, err := Load()
 	if err != nil {
@@ -68,6 +82,14 @@ func TestLoadFromEnv(t *testing.T) {
 		MaxSandboxes:   5,
 		PruneAfter:     30 * 24 * time.Hour,
 		LogLevel:       slog.LevelDebug,
+		VM: VM{
+			Image:       "/var/tmp/nsl-node.qcow2",
+			Dir:         "/var/tmp/nsl-vm",
+			MgmtNetwork: "nsl-mgmt",
+			MemoryMiB:   768,
+			VCPUs:       2,
+			BootTimeout: 3 * time.Minute,
+		},
 	}
 	if got != want {
 		t.Errorf("Load() = %+v, want %+v", got, want)
@@ -90,6 +112,9 @@ func TestLoadInvalid(t *testing.T) {
 		{"log level unknown", "NSL_LOG_LEVEL", "verbose"},
 		{"prune after not a duration", "NSL_PRUNE_AFTER", "monthly"},
 		{"prune after not positive", "NSL_PRUNE_AFTER", "0d"},
+		{"vm memory not a number", "NSL_VM_MEMORY_MIB", "1G"},
+		{"vm vcpus not positive", "NSL_VM_VCPUS", "0"},
+		{"vm boot timeout not a duration", "NSL_VM_BOOT_TIMEOUT", "soon"},
 	}
 
 	for _, tt := range tests {

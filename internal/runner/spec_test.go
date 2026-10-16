@@ -203,3 +203,57 @@ func TestSpecFromLabEnvIncludesSetupEnv(t *testing.T) {
 		t.Errorf("Env = %v", spec.Env)
 	}
 }
+
+func TestBootstrapEnv(t *testing.T) {
+	spec := SandboxSpec{
+		Nodes: []NodeSpec{
+			{Name: "k3s01", Role: RoleK3sServer, K3sDisable: []string{"traefik", "metrics-server"}},
+			{Name: "k3s02", Role: RoleK3sAgent},
+			{Name: "web01", Role: "ubuntu"},
+		},
+		Links: []LinkSpec{{Name: "l1", Endpoints: []EndpointSpec{
+			{Node: "k3s01", Iface: "eth1", Address: "10.0.8.10/24"},
+			{Node: "k3s02", Iface: "eth1", Address: "10.0.8.20/24"},
+		}}},
+	}
+
+	server := spec.BootstrapEnv(spec.Nodes[0], "tok")
+	if server["NSL_K3S_DISABLE"] != "traefik,metrics-server" || server["NSL_K3S_TOKEN"] != "tok" {
+		t.Errorf("server env = %v", server)
+	}
+	if server["NSL_IFACES"] != "eth1=10.0.8.10/24" {
+		t.Errorf("server ifaces = %q", server["NSL_IFACES"])
+	}
+	agent := spec.BootstrapEnv(spec.Nodes[1], "tok")
+	if _, ok := agent["NSL_K3S_DISABLE"]; ok {
+		t.Errorf("agent env = %v, want no NSL_K3S_DISABLE", agent)
+	}
+	if agent["NSL_K3S_SERVER"] != "10.0.8.10" {
+		t.Errorf("agent server = %q", agent["NSL_K3S_SERVER"])
+	}
+	plain := spec.BootstrapEnv(spec.Nodes[2], "tok")
+	if len(plain) != 3 || plain["NSL_NODE"] != "web01" || plain["NSL_ROLE"] != "ubuntu" {
+		t.Errorf("ubuntu env = %v, want only NSL_NODE, NSL_ROLE and NSL_IFACES", plain)
+	}
+
+	empty := spec.BootstrapEnv(NodeSpec{Name: "k3s03", Role: RoleK3sServer}, "tok")
+	if empty["NSL_K3S_DISABLE"] != "" {
+		t.Errorf("NSL_K3S_DISABLE = %q, want empty", empty["NSL_K3S_DISABLE"])
+	}
+}
+
+func TestK3sServerAddress(t *testing.T) {
+	spec := SandboxSpec{
+		Nodes: []NodeSpec{{Name: "k3s02", Role: RoleK3sAgent}, {Name: "k3s01", Role: RoleK3sServer}},
+		Links: []LinkSpec{{Name: "l1", Endpoints: []EndpointSpec{
+			{Node: "k3s01", Iface: "eth1", Address: "10.0.8.10/24"},
+			{Node: "k3s02", Iface: "eth1", Address: "10.0.8.20/24"},
+		}}},
+	}
+	if got, want := spec.K3sServerAddress(), "10.0.8.10"; got != want {
+		t.Errorf("K3sServerAddress = %q, want %q", got, want)
+	}
+	if got := (SandboxSpec{}).K3sServerAddress(); got != "" {
+		t.Errorf("K3sServerAddress without a server = %q, want empty", got)
+	}
+}

@@ -88,44 +88,6 @@ func TestExecEnv(t *testing.T) {
 	}
 }
 
-func TestBootstrapEnv(t *testing.T) {
-	spec := runner.SandboxSpec{
-		Nodes: []runner.NodeSpec{
-			{Name: "k3s01", Role: runner.RoleK3sServer, K3sDisable: []string{"traefik", "metrics-server"}},
-			{Name: "k3s02", Role: "k3s-agent"},
-			{Name: "web01", Role: "ubuntu"},
-		},
-		Links: []runner.LinkSpec{{Name: "l1", Endpoints: []runner.EndpointSpec{
-			{Node: "k3s01", Iface: "eth1", Address: "10.0.8.10/24"},
-			{Node: "k3s02", Iface: "eth1", Address: "10.0.8.20/24"},
-		}}},
-	}
-
-	server := bootstrapEnv(spec, spec.Nodes[0], "tok", "10.0.8.10")
-	if server["NSL_K3S_DISABLE"] != "traefik,metrics-server" || server["NSL_K3S_TOKEN"] != "tok" {
-		t.Errorf("server env = %v", server)
-	}
-	if server["NSL_IFACES"] != "eth1=10.0.8.10/24" {
-		t.Errorf("server ifaces = %q", server["NSL_IFACES"])
-	}
-	agent := bootstrapEnv(spec, spec.Nodes[1], "tok", "10.0.8.10")
-	if _, ok := agent["NSL_K3S_DISABLE"]; ok {
-		t.Errorf("agent env = %v, want no NSL_K3S_DISABLE", agent)
-	}
-	if agent["NSL_K3S_SERVER"] != "10.0.8.10" {
-		t.Errorf("agent server = %q", agent["NSL_K3S_SERVER"])
-	}
-	plain := bootstrapEnv(spec, spec.Nodes[2], "tok", "10.0.8.10")
-	if _, ok := plain["NSL_K3S_TOKEN"]; ok {
-		t.Errorf("ubuntu env = %v, want no k3s variables", plain)
-	}
-
-	empty := bootstrapEnv(spec, runner.NodeSpec{Name: "k3s03", Role: runner.RoleK3sServer}, "tok", "")
-	if empty["NSL_K3S_DISABLE"] != "" {
-		t.Errorf("NSL_K3S_DISABLE = %q, want empty", empty["NSL_K3S_DISABLE"])
-	}
-}
-
 func TestNodesReady(t *testing.T) {
 	const ready = "k3s01   Ready    control-plane,master   20s   v1.36.4+k3s1\nk3s02   Ready    <none>                 8s    v1.36.4+k3s1\n"
 	tests := []struct {
@@ -168,21 +130,5 @@ func TestK3sNodeNames(t *testing.T) {
 	}
 	if got := k3sServerNode(plain); got != "" {
 		t.Errorf("k3sServerNode without a server = %q", got)
-	}
-}
-
-func TestK3sServerAddress(t *testing.T) {
-	spec := runner.SandboxSpec{
-		Nodes: []runner.NodeSpec{{Name: "k3s02", Role: "k3s-agent"}, {Name: "k3s01", Role: "k3s-server"}},
-		Links: []runner.LinkSpec{{Name: "l1", Endpoints: []runner.EndpointSpec{
-			{Node: "k3s01", Iface: "eth1", Address: "10.0.8.10/24"},
-			{Node: "k3s02", Iface: "eth1", Address: "10.0.8.20/24"},
-		}}},
-	}
-	if got, want := k3sServerAddress(spec), "10.0.8.10"; got != want {
-		t.Errorf("k3sServerAddress = %q, want %q", got, want)
-	}
-	if got := k3sServerAddress(runner.SandboxSpec{}); got != "" {
-		t.Errorf("k3sServerAddress without a server = %q, want empty", got)
 	}
 }

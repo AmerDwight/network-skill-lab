@@ -9,7 +9,10 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 )
 
-const RoleK3sServer = "k3s-server"
+const (
+	RoleK3sServer = "k3s-server"
+	RoleK3sAgent  = "k3s-agent"
+)
 
 var defaultK3sDisable = []string{"traefik", "metrics-server"}
 
@@ -71,4 +74,41 @@ func (s SandboxSpec) IfacesEnv(node string) string {
 		}
 	}
 	return strings.Join(pairs, ",")
+}
+
+func IsK3sRole(role string) bool {
+	return role == RoleK3sServer || role == RoleK3sAgent
+}
+
+func (s SandboxSpec) BootstrapEnv(node NodeSpec, k3sToken string) map[string]string {
+	env := map[string]string{
+		"NSL_NODE":   node.Name,
+		"NSL_ROLE":   node.Role,
+		"NSL_IFACES": s.IfacesEnv(node.Name),
+	}
+	if IsK3sRole(node.Role) {
+		env["NSL_K3S_TOKEN"] = k3sToken
+		env["NSL_K3S_SERVER"] = s.K3sServerAddress()
+	}
+	if node.Role == RoleK3sServer {
+		env["NSL_K3S_DISABLE"] = strings.Join(node.K3sDisable, ",")
+	}
+	return env
+}
+
+func (s SandboxSpec) K3sServerAddress() string {
+	for _, node := range s.Nodes {
+		if node.Role != RoleK3sServer {
+			continue
+		}
+		ifaces := s.IfacesEnv(node.Name)
+		if ifaces == "" {
+			return ""
+		}
+		first, _, _ := strings.Cut(ifaces, ",")
+		_, address, _ := strings.Cut(first, "=")
+		address, _, _ = strings.Cut(address, "/")
+		return address
+	}
+	return ""
 }

@@ -24,6 +24,16 @@ type Config struct {
 	MaxSandboxes   int
 	PruneAfter     time.Duration
 	LogLevel       slog.Level
+	VM             VM
+}
+
+type VM struct {
+	Image       string
+	Dir         string
+	MgmtNetwork string
+	MemoryMiB   int
+	VCPUs       int
+	BootTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -54,7 +64,29 @@ func Load() (Config, error) {
 	if cfg.LogLevel, err = lookupLevel("NSL_LOG_LEVEL", slog.LevelInfo); err != nil {
 		return Config{}, err
 	}
+	if cfg.VM, err = loadVM(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+func loadVM() (VM, error) {
+	vm := VM{
+		Image:       lookupString("NSL_VM_IMAGE", ""),
+		Dir:         lookupString("NSL_VM_DIR", "/var/lib/nsl/vm"),
+		MgmtNetwork: lookupString("NSL_VM_MGMT_NETWORK", "default"),
+	}
+	var err error
+	if vm.MemoryMiB, err = lookupInt("NSL_VM_MEMORY_MIB", 1024); err != nil {
+		return VM{}, err
+	}
+	if vm.VCPUs, err = lookupInt("NSL_VM_VCPUS", 1); err != nil {
+		return VM{}, err
+	}
+	if vm.BootTimeout, err = lookupDuration("NSL_VM_BOOT_TIMEOUT", 120*time.Second); err != nil {
+		return VM{}, err
+	}
+	return vm, nil
 }
 
 // instanceID keys the Docker labels that scope garbage collection, so two nsl
