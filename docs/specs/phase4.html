@@ -71,10 +71,10 @@ a{color:var(--accent)}
 <h1>Phase 4 遠端 Runner 與 VM</h1>
 <div class="meta">
   <span>類型 <b>spike + 正式開發</b></span>
-  <span>版本 <b>v1 草案</b></span>
-  <span>日期 <b>2026-09-25</b></span>
+  <span>版本 <b>v1</b></span>
+  <span>日期 <b>2026-09-25，2026-10-16 批准</b></span>
   <span>撰寫 <b>Fable 5.1（planner）</b></span>
-  <span>狀態 <b><span class="tag pending">待批准</span></b></span>
+  <span>狀態 <b><span class="tag risk">已批准</span></b></span>
 </div>
 <p class="lede">到 Phase 3 為止，控制面與沙箱在同一台機器，這是 R6 記錄的上線前置條件。Phase 4 把 <code>Runner</code> 介面真正變成遠端的：成員在自己的主機跑 <code>nsl runner</code>，用 token 連回控制面，題目在他們的機器上執行；控制面主機不再需要 Docker。同一個 phase 先用 spike 驗證 VM provider（libvirt + KVM + cloud-init），通過才正式化，讓 <code>environment: vm</code> 的擬真題有落點。</p>
 
@@ -113,7 +113,7 @@ a{color:var(--accent)}
 </table></div>
 
 <h2><span class="n">03</span>待批的提案</h2>
-<p>批准這份 spec 即視為採納，有異議請指出編號。</p>
+<p>以下十項於 2026-10-16 隨 spec 一併採納。</p>
 
 <div class="decision"><b class="q">P1 runner 外連控制面，單一 WebSocket，JSON 控制訊息 + 帶 stream id 的二進位串流</b>
 控制面不主動連 runner，runner 主機不需要開 port、不需要公網。同一條連線承載 RPC（Provision、Exec、Destroy、GC、Health）與 PTY 串流（每個 terminal 分頁一個 stream id）。
@@ -265,11 +265,7 @@ Attempt JSON                     += "runner": "local" | "&lt;name&gt;"</code></p
 </ul>
 
 <div class="approve">
-<h3 style="margin-top:0">批准這份 spec 需要你回答</h3>
-<ol>
-<li>P1 到 P10 有沒有要改的？特別是 P3 斷線不接續、P5 VM 的 exec / pty 走法。</li>
-<li>VM spike 要在哪台機器跑？你的 WSL2 有沒有開巢狀虛擬化，或有另一台 Linux 主機？</li>
-<li>批准後我先做 T0 spike 與派 T1，同時派 T2。</li>
-</ol>
+<h3 style="margin-top:0">批准紀錄</h3>
+<p>2026-10-16 使用者批准：P1 到 P10 全採納；VM spike 在本機 WSL2 進行（libvirt / QEMU 已安裝，/dev/kvm 可用）。Task 以 GitHub issue 追蹤。</p>
 </div>
 </div>
