@@ -44,12 +44,11 @@ func newHarness(t *testing.T) *harness {
 
 	fr := newFakeRunner()
 	svc := attempt.New(attempt.Deps{
-		Store:    st,
-		Runner:   fr,
-		Content:  &content.Content{Labs: labs},
-		Image:    "nsl/node",
-		RunnerID: "fake",
-		Logger:   discardLogger(),
+		Store:   st,
+		Runner:  fr,
+		Content: &content.Content{Labs: labs},
+		Image:   "nsl/node",
+		Logger:  discardLogger(),
 	})
 	t.Cleanup(svc.Close)
 

@@ -14,6 +14,19 @@ export function RunnerBusyNotice({ busy }: { busy: RunnerBusy }) {
           max: busy.sandboxes_max,
         })}
       </span>
+      {busy.runners.length > 0 ? (
+        <ul className="runner-loads">
+          {busy.runners.map((load) => (
+            <li key={load.name}>
+              {t("attempt.runnerBusy.runner", {
+                name: load.name,
+                active: load.active,
+                capacity: load.capacity,
+              })}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

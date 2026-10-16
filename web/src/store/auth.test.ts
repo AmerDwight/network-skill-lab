@@ -51,6 +51,7 @@ const attempt: Attempt = {
   mode: "guided",
   status: "running",
   error_message: "",
+  runner: "local",
   lab,
   ticket: "the server cannot reach the gateway",
   nodes: [{ name: "host", role: "linux" }],

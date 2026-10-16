@@ -65,6 +65,7 @@ const lab: LabSummary = {
 };
 
 const labDetail: LabDetail = {
+  environment: "container",
   ...lab,
   nodes: [{ name: "host", role: "linux" }],
   checkpoints: [{ id: "link-up", title: "The link is up" }],
@@ -77,6 +78,7 @@ const attempt: Attempt = {
   mode: "guided",
   status: "provisioning",
   error_message: "",
+  runner: "local",
   lab,
   ticket: "the server cannot reach the gateway",
   nodes: [{ name: "host", role: "linux" }],

@@ -106,12 +106,11 @@ func TestFixtureLabRunsToPassed(t *testing.T) {
 
 	provider := docker.New(cli, docker.Options{Image: testImage})
 	svc := attempt.New(attempt.Deps{
-		Store:    st,
-		Runner:   provider,
-		Content:  &content.Content{Labs: labs},
-		Image:    testImage,
-		RunnerID: "docker",
-		Logger:   logger,
+		Store:   st,
+		Runner:  provider,
+		Content: &content.Content{Labs: labs},
+		Image:   testImage,
+		Logger:  logger,
 	})
 	chk := checker.New(checker.Deps{Store: st, Runner: provider, Attempts: svc, Interval: time.Second, Logger: logger})
 	rec := recorder.New(recorder.Deps{Store: st, Runner: provider, Attempts: svc, Interval: time.Second, DataDir: dataDir, Logger: logger})

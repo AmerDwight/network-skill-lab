@@ -24,6 +24,8 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/lint"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
+	"github.com/AmerDwight/network-skill-lab/internal/runner"
+	"github.com/AmerDwight/network-skill-lab/internal/runnerserver"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 	"github.com/AmerDwight/network-skill-lab/internal/web"
 	"github.com/docker/docker/client"
@@ -33,6 +35,7 @@ var version = "dev"
 
 const (
 	shutdownTimeout      = 10 * time.Second
+	dockerPingTimeout    = 5 * time.Second
 	inotifyInstancesPath = "/proc/sys/fs/inotify/max_user_instances"
 	minInotifyInstances  = 512
 )
@@ -185,33 +188,26 @@ func serve(args []string) error {
 		logger.Info("accounts ready", "users", users)
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("create docker client: %w", err)
-	}
-	defer func() {
-		if err := cli.Close(); err != nil {
-			logger.Error("close docker client", "error", err)
-		}
-	}()
+	local, closeLocal := localRunner(ctx, cfg, logger)
+	defer closeLocal()
 
-	provider := docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance, SystemdTimeout: cfg.SystemdTimeout})
+	hub := runnerserver.NewHub(st.Runners, logger)
 	attempts := attempt.New(attempt.Deps{
-		Store:        st,
-		Runner:       provider,
-		Content:      loaded,
-		Image:        cfg.NodeImage,
-		RunnerID:     "docker",
-		DataDir:      cfg.DataDir,
-		MaxSandboxes: cfg.MaxSandboxes,
-		IdleTimeout:  cfg.IdleTimeout,
-		Logger:       logger,
+		Store:       st,
+		Runners:     runner.NewRegistry(local, cfg.MaxSandboxes, hub),
+		Content:     loaded,
+		Image:       cfg.NodeImage,
+		DataDir:     cfg.DataDir,
+		IdleTimeout: cfg.IdleTimeout,
+		Logger:      logger,
 	})
 	defer attempts.Close()
+	hub.OnDisconnect(attempts.RunnerDisconnected)
+	hub.OnReconnect(attempts.RunnerReconnected)
 
 	checks := checker.New(checker.Deps{
 		Store:    st,
-		Runner:   provider,
+		Runner:   attempts.Runner(),
 		Attempts: attempts,
 		Interval: cfg.CheckInterval,
 		Logger:   logger,
@@ -221,7 +217,7 @@ func serve(args []string) error {
 
 	recordings := recorder.New(recorder.Deps{
 		Store:    st,
-		Runner:   provider,
+		Runner:   attempts.Runner(),
 		Attempts: attempts,
 		DataDir:  cfg.DataDir,
 		Logger:   logger,
@@ -239,14 +235,14 @@ func serve(args []string) error {
 	recordings.Start(ctx)
 
 	handler := web.NewRouter(api.New(api.Deps{
-		Attempts:     attempts,
-		Content:      loaded,
-		Store:        st,
-		Runner:       provider,
-		Recorder:     recordings,
-		Auth:         auth.New(st),
-		MaxSandboxes: cfg.MaxSandboxes,
-		Logger:       logger,
+		Attempts: attempts,
+		Content:  loaded,
+		Store:    st,
+		Runner:   attempts.Runner(),
+		Hub:      hub,
+		Recorder: recordings,
+		Auth:     auth.New(st),
+		Logger:   logger,
 	}))
 
 	srv := &http.Server{
@@ -279,6 +275,30 @@ func serve(args []string) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return <-errc
+}
+
+// localRunner returns the in-process Docker runner, or nil when this host has no
+// reachable Docker daemon, so a control plane can run with remote runners only.
+func localRunner(ctx context.Context, cfg config.Config, logger *slog.Logger) (runner.Runner, func()) {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		logger.Warn("in-process runner disabled: cannot create a Docker client", "error", err)
+		return nil, func() {}
+	}
+	closeClient := func() {
+		if err := cli.Close(); err != nil {
+			logger.Error("close docker client", "error", err)
+		}
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, dockerPingTimeout)
+	defer cancel()
+	if _, err := cli.Ping(pingCtx); err != nil {
+		logger.Warn("in-process runner disabled: Docker is not reachable; attempts need a remote runner", "error", err)
+		closeClient()
+		return nil, func() {}
+	}
+	logger.Info("in-process runner enabled", "name", runner.LocalName, "capacity", cfg.MaxSandboxes)
+	return docker.New(cli, docker.Options{Image: cfg.NodeImage, Instance: cfg.Instance, SystemdTimeout: cfg.SystemdTimeout}), closeClient
 }
 
 func warnInotifyLimit(logger *slog.Logger) {

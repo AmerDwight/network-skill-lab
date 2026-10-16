@@ -67,6 +67,7 @@ export function attemptPayload(id) {
     mode: state.mode,
     status: state.status,
     error_message: "",
+    runner: "local",
     lab: summary(lab),
     ticket,
     nodes: lab.nodes,

@@ -46,7 +46,10 @@ export interface LabCheckpoint {
   title: string;
 }
 
+export type LabEnvironment = "container" | "vm";
+
 export interface LabDetail extends LabSummary {
+  environment: LabEnvironment;
   nodes: LabNode[];
   checkpoints: LabCheckpoint[];
   topic_title: string;
@@ -112,6 +115,7 @@ export interface Attempt {
   mode: LabMode;
   status: AttemptStatus;
   error_message: string;
+  runner: string;
   lab: LabSummary;
   ticket: string;
   nodes: LabNode[];
@@ -261,12 +265,43 @@ export interface AdminUser extends Me {
   attempts: number;
 }
 
+export interface AdminRunner {
+  id: string;
+  name: string;
+  capabilities: string[];
+  capacity: number;
+  active: number;
+  connected: boolean;
+  last_seen_at: string | null;
+  version: string;
+  revoked_at: string | null;
+}
+
+export interface CreateRunnerRequest {
+  name: string;
+  capabilities?: LabEnvironment[];
+  capacity?: number;
+}
+
+export interface CreatedRunner {
+  id: string;
+  name: string;
+  token: string;
+}
+
+export interface RunnerSummary {
+  name: string;
+  capabilities: string[];
+  connected: boolean;
+}
+
 export interface AdminStats {
   sandboxes_active: number;
   sandboxes_max: number;
   recordings_bytes: number;
   attempts: number;
   oldest_attempt_at: string | null;
+  runners: AdminRunner[];
 }
 
 export interface AttemptUser {
@@ -284,9 +319,16 @@ export interface AdminAttempt {
   user: AttemptUser;
 }
 
+export interface RunnerLoad {
+  name: string;
+  active: number;
+  capacity: number;
+}
+
 export interface RunnerBusy {
   sandboxes_active: number;
   sandboxes_max: number;
+  runners: RunnerLoad[];
 }
 
 export interface LoginRequest {

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as client from "../api/client";
 import { ApiError } from "../api/client";
-import type { AdminAttempt, AdminUser, Me } from "../api/types";
+import type { AdminAttempt, AdminRunner, AdminUser, Me } from "../api/types";
 import i18next from "../i18n";
 import {
   initialState as adminInitialState,
@@ -36,6 +36,9 @@ vi.mock("../api/client", async (importOriginal) => {
     listAdminAttempts: vi.fn(),
     adminAbandon: vi.fn(),
     getAdminStats: vi.fn(),
+    listRunners: vi.fn(),
+    createRunner: vi.fn(),
+    revokeRunner: vi.fn(),
   };
 });
 
@@ -45,6 +48,9 @@ const updateUser = vi.mocked(client.updateUser);
 const listAdminAttempts = vi.mocked(client.listAdminAttempts);
 const adminAbandon = vi.mocked(client.adminAbandon);
 const getAdminStats = vi.mocked(client.getAdminStats);
+const listRunners = vi.mocked(client.listRunners);
+const createRunner = vi.mocked(client.createRunner);
+const revokeRunner = vi.mocked(client.revokeRunner);
 
 const admin: Me = {
   id: "u-admin",
@@ -88,6 +94,51 @@ const attempts: AdminAttempt[] = [
   },
 ];
 
+const runners: AdminRunner[] = [
+  {
+    id: "",
+    name: "local",
+    capabilities: ["container"],
+    capacity: 3,
+    active: 1,
+    connected: true,
+    last_seen_at: null,
+    version: "",
+    revoked_at: null,
+  },
+  {
+    id: "r-lab",
+    name: "lab-01",
+    capabilities: ["container", "vm"],
+    capacity: 2,
+    active: 0,
+    connected: true,
+    last_seen_at: "2026-10-16T08:00:00.000Z",
+    version: "v0.4.0",
+    revoked_at: null,
+  },
+  {
+    id: "r-old",
+    name: "old-01",
+    capabilities: ["container"],
+    capacity: 1,
+    active: 0,
+    connected: false,
+    last_seen_at: null,
+    version: "",
+    revoked_at: "2026-10-01T08:00:00.000Z",
+  },
+];
+
+function runnerRow(name: string): HTMLElement {
+  const table = screen.getByRole("table", { name: "Runners" });
+  const row = within(table).getByRole("cell", { name }).closest("tr");
+  if (row === null) {
+    throw new Error(`no row for runner ${name}`);
+  }
+  return row;
+}
+
 function usersTable(): HTMLElement {
   return screen.getByRole("table", { name: "Users" });
 }
@@ -121,12 +172,14 @@ beforeEach(async () => {
   await i18next.changeLanguage("en");
   listUsers.mockResolvedValue(users);
   listAdminAttempts.mockResolvedValue(attempts);
+  listRunners.mockResolvedValue(runners);
   getAdminStats.mockResolvedValue({
     sandboxes_active: 1,
     sandboxes_max: 3,
     recordings_bytes: 734003200,
     attempts: 12,
     oldest_attempt_at: "2026-08-02T09:15:00.000Z",
+    runners: [],
   });
 });
 
@@ -171,6 +224,7 @@ describe("AdminPage", () => {
       recordings_bytes: 0,
       attempts: 0,
       oldest_attempt_at: null,
+      runners: [],
     });
     renderPage();
 
@@ -319,6 +373,122 @@ describe("AdminPage", () => {
     await waitFor(() => {
       expect(adminAbandon).toHaveBeenCalledWith("01JATTEMPT");
     });
+  });
+
+  it("lists the runners with their capacity and connection", async () => {
+    renderPage();
+
+    await screen.findByRole("table", { name: "Runners" });
+
+    const local = runnerRow("local");
+    expect(within(local).getByText("Built in")).toBeDefined();
+    expect(within(local).queryByRole("button")).toBeNull();
+
+    const lab = runnerRow("lab-01");
+    expect(within(lab).getByText("Container, VM")).toBeDefined();
+    expect(within(lab).getByText("Connected")).toBeDefined();
+    expect(within(lab).getByText("v0.4.0")).toBeDefined();
+    expect(within(lab).getByRole("button", { name: "Revoke" })).toBeDefined();
+
+    const old = runnerRow("old-01");
+    expect(within(old).getByText("Revoked")).toBeDefined();
+    expect(within(old).getByText("Never")).toBeDefined();
+    expect(within(old).queryByRole("button")).toBeNull();
+  });
+
+  it("creates a runner and shows its token once with the command", async () => {
+    createRunner.mockResolvedValue({
+      id: "r-new",
+      name: "lab-02",
+      token: "s3cret-token",
+    });
+    renderPage();
+
+    await screen.findByRole("table", { name: "Runners" });
+    fireEvent.change(screen.getByLabelText("Runner name"), {
+      target: { value: "lab-02" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "VM" }));
+    fireEvent.change(screen.getByLabelText("Sandboxes at once"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+
+    await waitFor(() => {
+      expect(createRunner).toHaveBeenCalledWith({
+        name: "lab-02",
+        capabilities: ["container", "vm"],
+        capacity: 2,
+      });
+    });
+    expect(await screen.findByText("s3cret-token")).toBeDefined();
+    expect(
+      screen.getByText("Copy it now; it is shown only once."),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        /^nsl runner --url wss?:\/\/[^ ]+\/ws\/runner --name lab-02 --token-file \.\/lab-02\.token$/,
+      ),
+    ).toBeDefined();
+    expect(listRunners).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText("s3cret-token")).toBeNull();
+  });
+
+  it("checks the runner name before asking the server", async () => {
+    renderPage();
+
+    await screen.findByRole("table", { name: "Runners" });
+    fireEvent.change(screen.getByLabelText("Runner name"), {
+      target: { value: "local" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+
+    expect(await screen.findByText(/local is reserved/)).toBeDefined();
+    expect(createRunner).not.toHaveBeenCalled();
+  });
+
+  it("reports a runner name the server already knows", async () => {
+    createRunner.mockRejectedValue(new ApiError(409, "runner_exists", "x"));
+    renderPage();
+
+    await screen.findByRole("table", { name: "Runners" });
+    fireEvent.change(screen.getByLabelText("Runner name"), {
+      target: { value: "lab-01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+
+    expect(
+      await screen.findByText("A runner with that name already exists."),
+    ).toBeDefined();
+  });
+
+  it("revokes a runner after a confirmation", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    revokeRunner.mockResolvedValue();
+    renderPage();
+
+    await screen.findByRole("table", { name: "Runners" });
+    fireEvent.click(
+      within(runnerRow("lab-01")).getByRole("button", { name: "Revoke" }),
+    );
+
+    await waitFor(() => {
+      expect(revokeRunner).toHaveBeenCalledWith("r-lab");
+    });
+  });
+
+  it("keeps the runner when the revoke is declined", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    renderPage();
+
+    await screen.findByRole("table", { name: "Runners" });
+    fireEvent.click(
+      within(runnerRow("lab-01")).getByRole("button", { name: "Revoke" }),
+    );
+
+    expect(revokeRunner).not.toHaveBeenCalled();
   });
 
   it("keeps the attempt when the confirmation is declined", async () => {

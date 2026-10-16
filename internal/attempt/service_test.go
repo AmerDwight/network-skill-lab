@@ -74,7 +74,6 @@ func newHarnessWith(t *testing.T, fr *fakeRunner, loaded *content.Content, maxSa
 		Runner:       fr,
 		Content:      loaded,
 		Image:        "nsl/node",
-		RunnerID:     "fake",
 		DataDir:      dataDir,
 		MaxSandboxes: maxSandboxes,
 		IdleTimeout:  testIdleTimeout,
@@ -176,7 +175,7 @@ func TestStartProvisionsThenRuns(t *testing.T) {
 	if att.Status != store.StatusRunning {
 		t.Fatalf("stored status = %q", att.Status)
 	}
-	if att.SandboxID != view.Id || att.RunnerID != "fake" {
+	if att.SandboxID != view.Id || att.RunnerID != "local" {
 		t.Fatalf("stored sandbox = %q, runner = %q", att.SandboxID, att.RunnerID)
 	}
 	if att.StartedAt == nil || !att.StartedAt.Equal(h.clock.Now()) {

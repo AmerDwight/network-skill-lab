@@ -123,3 +123,32 @@ location / {
 First run: create an admin with `nsl user add <name> --role admin`, then sign in. Set `NSL_MAX_SANDBOXES` to what the host can hold (about 30 MB per Ubuntu node, 200 MB per k3s agent, 600 MB per k3s server). One `nsl serve` per data directory; the sandbox host must stay on a trusted network until the remote runner exists (DESIGN.md R6).
 
 Retention: `nsl prune --older-than 30d [--dry-run]` deletes finished attempts that ended before the cutoff, with their recordings and command history. Set `NSL_PRUNE_AFTER` (for example `720h` or `30d`) to have `nsl serve` do the same at startup and every 24 hours.
+
+### Remote runners
+
+Sandboxes can run on other hosts. Each runner host needs Docker, the
+`nsl/node` image and the same `nsl` binary; it dials out to the control plane,
+so it needs no open port.
+
+1. Register the runner on the admin page (Runners, Add a runner) or on the
+   control-plane host with `nsl runner token lab-01`. The token is shown once;
+   save it to a file on the runner host.
+2. On the runner host run
+   `nsl runner --url wss://<host>/ws/runner --name lab-01 --token-file ./lab-01.token --max-sandboxes 3`
+   (or pass the token in `NSL_RUNNER_TOKEN`). The admin page then lists it as
+   connected with its capacity and version.
+
+New attempts go to the connected runner that offers the lab's environment and
+has the lowest share of its capacity in use; the attempt's page shows the
+runner's name. When every such runner is full, starting a lab answers 429 with
+the load of each runner. The in-process runner is called `local`, takes
+`NSL_MAX_SANDBOXES` sandboxes, and is left out when the control-plane host has
+no reachable Docker daemon.
+
+If a runner's connection drops, its attempts end within seconds with the reason
+`runner disconnected`. The runner keeps their sandboxes for two minutes; when
+it reconnects the control plane destroys them, and it takes new attempts right
+away. Revoking the runner on the admin page disconnects it at once and it
+stops instead of reconnecting; `nsl runner revoke lab-01` only refuses its next
+connection, because it runs outside the server. A runner token controls Docker
+on that host, so treat it like a root credential.

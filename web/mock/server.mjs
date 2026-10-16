@@ -45,6 +45,70 @@ function sandboxStats() {
   };
 }
 
+const runners = [
+  {
+    id: "01JMOCKRUNNER",
+    name: "lab-01",
+    capabilities: ["container"],
+    capacity: 2,
+    active: 0,
+    connected: true,
+    last_seen_at: new Date().toISOString(),
+    version: "mock",
+    revoked_at: null,
+  },
+];
+
+function runnerList() {
+  return [
+    {
+      id: "",
+      name: "local",
+      capabilities: ["container"],
+      capacity: sandboxesMax,
+      active: activeAttempts().length,
+      connected: true,
+      last_seen_at: null,
+      version: "",
+      revoked_at: null,
+    },
+    ...runners,
+  ];
+}
+
+function createRunner(body) {
+  const name = body?.name ?? "";
+  if (runners.some((runner) => runner.name === name) || name === "local") {
+    return {
+      status: 409,
+      body: { error: { code: "runner_exists", message: name } },
+    };
+  }
+  const id = `01JMOCKRUNNER${runners.length}`;
+  runners.push({
+    id,
+    name,
+    capabilities: body?.capabilities ?? ["container"],
+    capacity: body?.capacity ?? 3,
+    active: 0,
+    connected: false,
+    last_seen_at: null,
+    version: "",
+    revoked_at: null,
+  });
+  return { status: 201, body: { id, name, token: `mock-token-${name}` } };
+}
+
+function revokeRunner(id) {
+  const runner = runners.find((candidate) => candidate.id === id);
+  if (runner === undefined) {
+    return found(undefined, id);
+  }
+  runner.revoked_at = runner.revoked_at ?? new Date().toISOString();
+  runner.connected = false;
+  return { status: 204 };
+}
+
 function startAttempt(url, body, user) {
   const stats = sandboxStats();
   const busy =
@@ -57,6 +121,13 @@ function startAttempt(url, body, user) {
       body: {
         error: { code: "runner_busy", message: "every sandbox is in use" },
         ...stats,
+        runners: [
+          {
+            name: "local",
+            active: stats.sandboxes_active,
+            capacity: stats.sandboxes_max,
+          },
+        ],
       },
     };
   }
@@ -154,7 +225,28 @@ const routes = [
         recordings_bytes: 734003200,
         attempts: 12,
         oldest_attempt_at: "2026-08-02T09:15:00.000Z",
+        runners: runnerList(),
       },
+    }),
+  ],
+  ["GET", /^\/api\/admin\/runners$/, () => ({ body: runnerList() })],
+  ["POST", /^\/api\/admin\/runners$/, (match, url, body) => createRunner(body)],
+  [
+    "DELETE",
+    /^\/api\/admin\/runners\/([^/]+)$/,
+    (match) => revokeRunner(decodeURIComponent(match[1])),
+  ],
+  [
+    "GET",
+    /^\/api\/runners\/summary$/,
+    () => ({
+      body: runnerList()
+        .filter((runner) => runner.revoked_at === null)
+        .map(({ name, capabilities, connected }) => ({
+          name,
+          capabilities,
+          connected,
+        })),
     }),
   ],
   ["GET", /^\/api\/health$/, () => ({ body: health })],

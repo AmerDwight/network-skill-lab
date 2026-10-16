@@ -99,6 +99,32 @@ func (a *Attempts) CountActive(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+func (a *Attempts) CountActiveByRunner(ctx context.Context) (map[string]int, error) {
+	rows, err := a.db.QueryContext(ctx,
+		`SELECT COALESCE(runner_id, ''), COUNT(*) FROM attempts WHERE status IN (?, ?) GROUP BY runner_id`,
+		StatusProvisioning, StatusRunning)
+	if err != nil {
+		return nil, fmt.Errorf("count active attempts by runner: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var (
+			runnerID string
+			count    int
+		)
+		if err := rows.Scan(&runnerID, &count); err != nil {
+			return nil, fmt.Errorf("count active attempts by runner: %w", err)
+		}
+		counts[runnerID] += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("count active attempts by runner: %w", err)
+	}
+	return counts, nil
+}
+
 func (a *Attempts) Count(ctx context.Context) (int, error) {
 	var count int
 	if err := a.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM attempts`).Scan(&count); err != nil {

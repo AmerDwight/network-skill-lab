@@ -13,40 +13,38 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/content"
 	"github.com/AmerDwight/network-skill-lab/internal/recorder"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
+	"github.com/AmerDwight/network-skill-lab/internal/runnerserver"
 	"github.com/AmerDwight/network-skill-lab/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
-const (
-	maxRequestBytes     = 64 << 10
-	defaultMaxSandboxes = 3
-)
+const maxRequestBytes = 64 << 10
 
 var errBadRequest = errors.New("bad request")
 
 type Deps struct {
-	Attempts     *attempt.Service
-	Content      *content.Content
-	Store        *store.Store
-	Runner       runner.Runner
-	Recorder     *recorder.Recorder
-	Auth         *auth.Service
-	MaxSandboxes int
-	Logger       *slog.Logger
+	Attempts *attempt.Service
+	Content  *content.Content
+	Store    *store.Store
+	Runner   runner.Runner
+	Hub      *runnerserver.Hub
+	Recorder *recorder.Recorder
+	Auth     *auth.Service
+	Logger   *slog.Logger
 }
 
 type server struct {
-	attempts     *attempt.Service
-	content      *content.Content
-	byID         map[string]content.Lab
-	docs         map[string]content.Doc
-	store        *store.Store
-	runner       runner.Runner
-	recorder     *recorder.Recorder
-	auth         *auth.Service
-	maxSandboxes int
-	log          *slog.Logger
-	terminals    *terminals
+	attempts  *attempt.Service
+	content   *content.Content
+	byID      map[string]content.Lab
+	docs      map[string]content.Doc
+	store     *store.Store
+	runner    runner.Runner
+	hub       *runnerserver.Hub
+	recorder  *recorder.Recorder
+	auth      *auth.Service
+	log       *slog.Logger
+	terminals *terminals
 }
 
 func New(deps Deps) http.Handler {
@@ -64,27 +62,27 @@ func New(deps Deps) http.Handler {
 	for _, doc := range deps.Content.Docs {
 		docs[doc.ID] = doc
 	}
-	if deps.MaxSandboxes <= 0 {
-		deps.MaxSandboxes = defaultMaxSandboxes
-	}
 	s := &server{
-		attempts:     deps.Attempts,
-		content:      deps.Content,
-		byID:         byID,
-		docs:         docs,
-		store:        deps.Store,
-		runner:       deps.Runner,
-		recorder:     deps.Recorder,
-		auth:         deps.Auth,
-		maxSandboxes: deps.MaxSandboxes,
-		log:          deps.Logger,
-		terminals:    newTerminals(),
+		attempts:  deps.Attempts,
+		content:   deps.Content,
+		byID:      byID,
+		docs:      docs,
+		store:     deps.Store,
+		runner:    deps.Runner,
+		hub:       deps.Hub,
+		recorder:  deps.Recorder,
+		auth:      deps.Auth,
+		log:       deps.Logger,
+		terminals: newTerminals(),
 	}
 
 	r := chi.NewRouter()
 	r.Use(jsonWrites)
 	r.Get("/api/health", s.health)
 	r.Post("/api/auth/login", s.login)
+	if s.hub != nil {
+		r.Get("/ws/runner", s.hub.ServeHTTP)
+	}
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.authenticate)
@@ -100,6 +98,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/api/tracks/{id}", s.getTrack)
 		r.Post("/api/progress", s.markProgress)
 		r.Get("/api/history", s.history)
+		r.Get("/api/runners/summary", s.runnerSummary)
 		r.Post("/api/attempts", s.createAttempt)
 		r.Get("/api/attempts/current", s.currentAttempt)
 		r.Get("/api/attempts/{id}", s.getAttempt)
@@ -121,6 +120,9 @@ func New(deps Deps) http.Handler {
 			r.Post("/api/admin/attempts/{id}/abandon", s.adminAbandon)
 			r.Delete("/api/admin/attempts/{id}", s.adminDeleteAttempt)
 			r.Get("/api/admin/stats", s.adminStats)
+			r.Get("/api/admin/runners", s.listRunners)
+			r.Post("/api/admin/runners", s.createRunner)
+			r.Delete("/api/admin/runners/{id}", s.revokeRunner)
 		})
 	})
 
@@ -205,6 +207,8 @@ func classify(err error) (int, string) {
 		return http.StatusConflict, "attempt_finished"
 	case errors.Is(err, attempt.ErrNotTerminal):
 		return http.StatusConflict, "attempt_running"
+	case errors.Is(err, runner.ErrNoRunner):
+		return http.StatusConflict, "no_runner"
 	case errors.Is(err, errBadRequest):
 		return http.StatusBadRequest, "bad_request"
 	default:

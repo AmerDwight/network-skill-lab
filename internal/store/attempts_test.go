@@ -1,6 +1,7 @@
 package store
 
 import (
+	"maps"
 	"testing"
 	"time"
 )
@@ -97,6 +98,36 @@ func TestAttemptsCountActive(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("CountActive() = %d, want 2", count)
+	}
+}
+
+func TestAttemptsCountActiveByRunner(t *testing.T) {
+	st := openStore(t)
+	ctx := t.Context()
+	local := localUser(t, st)
+
+	now := time.Now()
+	for _, tc := range []struct{ status, runner string }{
+		{StatusProvisioning, "local"},
+		{StatusRunning, "local"},
+		{StatusRunning, "lab-01"},
+		{StatusPassed, "lab-01"},
+		{StatusError, "lab-02"},
+		{StatusRunning, ""},
+	} {
+		att := createAttempt(t, st, local.ID, tc.status, now)
+		if err := st.Attempts.SetSandbox(ctx, att.ID, tc.runner, att.ID); err != nil {
+			t.Fatalf("SetSandbox() error = %v", err)
+		}
+	}
+
+	got, err := st.Attempts.CountActiveByRunner(ctx)
+	if err != nil {
+		t.Fatalf("CountActiveByRunner() error = %v", err)
+	}
+	want := map[string]int{"local": 2, "lab-01": 1, "": 1}
+	if !maps.Equal(got, want) {
+		t.Errorf("CountActiveByRunner() = %v, want %v", got, want)
 	}
 }
 
