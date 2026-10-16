@@ -197,7 +197,10 @@ no reachable Docker daemon.
 If a runner's connection drops, its attempts end within seconds with the reason
 `runner disconnected`. The runner keeps their sandboxes for two minutes; when
 it reconnects the control plane destroys them, and it takes new attempts right
-away. Revoking the runner on the admin page disconnects it at once and it
-stops instead of reconnecting; `nsl runner revoke lab-01` only refuses its next
+away. A restarted runner process (after a crash, a reboot or an upgrade) first
+removes the sandboxes its previous process left behind: everything on the host
+labelled with its instance (`--instance`, default its name), so run one process
+per instance. Revoking the runner on the admin page disconnects it at once and
+it stops instead of reconnecting; `nsl runner revoke lab-01` only refuses its next
 connection, because it runs outside the server. A runner token controls Docker
 on that host, so treat it like a root credential.

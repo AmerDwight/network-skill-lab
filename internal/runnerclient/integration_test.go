@@ -19,6 +19,9 @@ import (
 	"github.com/AmerDwight/network-skill-lab/internal/content/contenttest"
 	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	dockerclient "github.com/docker/docker/client"
 )
 
@@ -37,7 +40,7 @@ func randomHex(t *testing.T) string {
 	return hex.EncodeToString(b)
 }
 
-func dockerProvider(t *testing.T) *docker.Provider {
+func dockerClient(t *testing.T) *dockerclient.Client {
 	t.Helper()
 	cli, err := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation())
 	if err != nil {
@@ -49,7 +52,26 @@ func dockerProvider(t *testing.T) *docker.Provider {
 	if _, err := cli.Ping(ctx); err != nil {
 		t.Skipf("docker daemon unreachable: %v", err)
 	}
-	return docker.New(cli, docker.Options{Image: integrationImage, Instance: "test-runner-" + randomHex(t)})
+	return cli
+}
+
+func dockerProvider(t *testing.T) *docker.Provider {
+	t.Helper()
+	return docker.New(dockerClient(t), docker.Options{Image: integrationImage, Instance: "test-runner-" + randomHex(t)})
+}
+
+func instanceResources(t *testing.T, cli *dockerclient.Client, instance string) (containers, networks int) {
+	t.Helper()
+	f := filters.NewArgs(filters.Arg("label", "nsl.instance="+instance))
+	cs, err := cli.ContainerList(t.Context(), container.ListOptions{All: true, Filters: f})
+	if err != nil {
+		t.Fatalf("list containers: %v", err)
+	}
+	ns, err := cli.NetworkList(t.Context(), network.ListOptions{Filters: f})
+	if err != nil {
+		t.Fatalf("list networks: %v", err)
+	}
+	return len(cs), len(ns)
 }
 
 func fixtureSpec(t *testing.T, attempt string) runner.SandboxSpec {
@@ -171,5 +193,44 @@ func TestRemoteRunnerWithDocker(t *testing.T) {
 	}
 	if c.active() != 0 {
 		t.Errorf("runner still tracks %d sandboxes", c.active())
+	}
+}
+
+func TestRestartedRunnerCollectsLeftovers(t *testing.T) {
+	cli := dockerClient(t)
+	instance := "test-runner-" + randomHex(t)
+	opts := docker.Options{Image: integrationImage, Instance: instance}
+	h := newHarness(t)
+	attempt := "t5b" + randomHex(t)
+	t.Cleanup(func() { _, _ = docker.New(cli, opts).Collect(context.WithoutCancel(t.Context())) })
+
+	crashed := newClient(Options{URL: h.url, Token: h.token, Name: runnerName, Capacity: 3, Version: "test", Provider: docker.New(cli, opts), Logger: quiet})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- crashed.run(ctx) }()
+	remote := h.waitRunner()
+	if _, err := remote.Provision(t.Context(), fixtureSpec(t, attempt)); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	crashed.untrackAll()
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run() after cancel = %v", err)
+	}
+	eventually(t, "the hub drops the stopped runner", func() bool {
+		_, ok := h.hub.Get(runnerName)
+		return !ok
+	})
+	containers, networks := instanceResources(t, cli, instance)
+	if containers == 0 || networks == 0 {
+		t.Fatalf("the simulated crash left %d containers and %d networks, want some of each", containers, networks)
+	}
+	t.Logf("the previous process left %d containers and %d networks", containers, networks)
+
+	restarted := newClient(Options{URL: h.url, Token: h.token, Name: runnerName, Capacity: 3, Version: "test", Provider: docker.New(cli, opts), Logger: quiet})
+	h.start(restarted)
+	h.waitRunner()
+	if containers, networks := instanceResources(t, cli, instance); containers != 0 || networks != 0 {
+		t.Errorf("after the restarted runner connected, %d containers and %d networks of instance %s remain", containers, networks, instance)
 	}
 }

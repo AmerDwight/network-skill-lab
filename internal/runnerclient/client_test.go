@@ -493,3 +493,42 @@ func TestStopDestroysSandboxes(t *testing.T) {
 		t.Error("stopping the runner left its sandbox behind")
 	}
 }
+
+func TestStartupCollectsLeftoversBeforeConnecting(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		gcErr error
+	}{
+		{name: "gc succeeds"},
+		{name: "gc fails", gcErr: errors.New("docker daemon hiccup")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.provider.gcErr = tc.gcErr
+			connectedBeforeGC := false
+			h.provider.onGC = func() {
+				_, connectedBeforeGC = h.hub.Get(runnerName)
+			}
+			reconnected := make(chan struct{}, 1)
+			h.hub.OnReconnect(func(string, []string) { reconnected <- struct{}{} })
+			_, remote := h.connect()
+
+			if connectedBeforeGC {
+				t.Error("the runner connected before collecting leftovers")
+			}
+			sb, _ := provision(t, remote, "att1")
+			h.killConnections()
+			select {
+			case <-reconnected:
+			case <-time.After(waitTimeout):
+				t.Fatal("the runner did not reconnect")
+			}
+			if got := h.provider.gcCount(); got != 1 {
+				t.Errorf("GC called %d times, want once at startup", got)
+			}
+			if !h.provider.has(sb) {
+				t.Error("a reconnect of the live process removed its sandbox")
+			}
+		})
+	}
+}

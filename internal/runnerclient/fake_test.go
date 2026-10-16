@@ -17,6 +17,9 @@ type fakeProvider struct {
 	ptys      []*fakePTY
 	block     chan struct{}
 	canceled  chan struct{}
+	gcCalls   int
+	gcErr     error
+	onGC      func()
 }
 
 func newFakeProvider() *fakeProvider {
@@ -99,8 +102,21 @@ func (f *fakeProvider) destroyedList() []runner.SandboxID {
 func (f *fakeProvider) GC(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.gcCalls++
+	if f.onGC != nil {
+		f.onGC()
+	}
+	if f.gcErr != nil {
+		return f.gcErr
+	}
 	clear(f.sandboxes)
 	return nil
+}
+
+func (f *fakeProvider) gcCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gcCalls
 }
 
 func (f *fakeProvider) Health(context.Context) runner.Health {
