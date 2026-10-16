@@ -1,0 +1,10 @@
+domain nsl-v2 mgmt iface enp1s0 ip 192.168.122.118
+ssh before: ok
+ssh while down: ssh: connect to host 192.168.122.118 port 22: Connection timed out
+FAILED-as-expected
+guest-exec while down: ok in 0.11s
+  nsl-v2
+  root
+  enp1s0           DOWN           52:54:00:00:1c:8a <BROADCAST,MULTICAST> 
+guest-exec exit code propagation: got 7
+ssh after up: ok
