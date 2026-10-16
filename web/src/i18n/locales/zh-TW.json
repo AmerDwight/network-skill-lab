@@ -63,6 +63,7 @@
   "provisioning.heading": "準備沙箱中",
   "provisioning.networks": "建立網路",
   "provisioning.containers": "啟動節點",
+  "provisioning.nodes": "建立節點",
   "provisioning.bootstrap": "bootstrap",
   "provisioning.setup": "執行 setup",
   "terminal.addTab": "+ {{node}}",

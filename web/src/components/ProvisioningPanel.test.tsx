@@ -28,6 +28,7 @@ describe("ProvisioningPanel", () => {
     render(
       <ProvisioningPanel
         step="containers"
+        environment="container"
         nodes={linuxNodes}
         precheckAttempt={null}
       />,
@@ -45,6 +46,7 @@ describe("ProvisioningPanel", () => {
     render(
       <ProvisioningPanel
         step="bootstrap"
+        environment="container"
         nodes={k3sNodes}
         precheckAttempt={null}
       />,
@@ -54,7 +56,14 @@ describe("ProvisioningPanel", () => {
   });
 
   it("shows k3s once a k3s step arrives for an unknown lab", () => {
-    render(<ProvisioningPanel step="k3s" nodes={[]} precheckAttempt={null} />);
+    render(
+      <ProvisioningPanel
+        step="k3s"
+        environment={null}
+        nodes={[]}
+        precheckAttempt={null}
+      />,
+    );
 
     expect(labels()).toContain("Waiting for k3s");
   });
@@ -63,6 +72,7 @@ describe("ProvisioningPanel", () => {
     render(
       <ProvisioningPanel
         step="precheck"
+        environment="container"
         nodes={linuxNodes}
         precheckAttempt={1}
       />,
@@ -78,6 +88,7 @@ describe("ProvisioningPanel", () => {
     render(
       <ProvisioningPanel
         step="precheck"
+        environment="container"
         nodes={linuxNodes}
         precheckAttempt={3}
       />,
@@ -90,6 +101,7 @@ describe("ProvisioningPanel", () => {
     render(
       <ProvisioningPanel
         step="containers"
+        environment="container"
         nodes={linuxNodes}
         precheckAttempt={1}
       />,
@@ -99,5 +111,67 @@ describe("ProvisioningPanel", () => {
       screen.getByText("Starting nodes").getAttribute("aria-current"),
     ).toBe("step");
     expect(labels()).toContain("Checking the sandbox");
+  });
+
+  it("shows the nodes step instead of containers for a vm lab", () => {
+    render(
+      <ProvisioningPanel
+        step="networks"
+        environment="vm"
+        nodes={linuxNodes}
+        precheckAttempt={null}
+      />,
+    );
+
+    expect(labels()).toEqual([
+      "Creating networks",
+      "Creating nodes",
+      "Bootstrapping",
+      "Running setup",
+    ]);
+  });
+
+  it("highlights the nodes step a vm provider reports", () => {
+    render(
+      <ProvisioningPanel
+        step="nodes"
+        environment={null}
+        nodes={linuxNodes}
+        precheckAttempt={null}
+      />,
+    );
+
+    expect(
+      screen.getByText("Creating nodes").getAttribute("aria-current"),
+    ).toBe("step");
+    expect(labels()).not.toContain("Starting nodes");
+  });
+
+  it("keeps the nodes step for a vm lab after it has passed", () => {
+    render(
+      <ProvisioningPanel
+        step="bootstrap"
+        environment="vm"
+        nodes={linuxNodes}
+        precheckAttempt={null}
+      />,
+    );
+
+    expect(labels()).toContain("Creating nodes");
+    expect(labels()).not.toContain("Starting nodes");
+  });
+
+  it("labels the nodes step in zh-TW", async () => {
+    await i18next.changeLanguage("zh-TW");
+    render(
+      <ProvisioningPanel
+        step="nodes"
+        environment="vm"
+        nodes={linuxNodes}
+        precheckAttempt={null}
+      />,
+    );
+
+    expect(labels()).toContain("建立節點");
   });
 });

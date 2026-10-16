@@ -38,6 +38,7 @@ const (
 )
 
 type k3sStack struct {
+	backend  *contentBackend
 	server   *httptest.Server
 	attempts *attempt.Service
 	provider *docker.Provider
@@ -70,20 +71,23 @@ func newK3sStack(t *testing.T) *k3sStack {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	provider := docker.New(cli, docker.Options{Image: k3sNodeImage})
+	backend := newContentBackend(t, cli, st, k3sNodeImage, logger)
+	provider := backend.provider
 	attempts := attempt.New(attempt.Deps{
 		Store:   st,
-		Runner:  provider,
+		Runner:  backend.local,
+		Runners: backend.registry,
 		Content: loaded,
 		Image:   k3sNodeImage,
 		Logger:  logger,
 	})
 	t.Cleanup(attempts.Close)
+	backend.listen(attempts)
 
-	checks := checker.New(checker.Deps{Store: st, Runner: provider, Attempts: attempts, Interval: time.Second, Logger: logger})
+	checks := checker.New(checker.Deps{Store: st, Runner: attempts.Runner(), Attempts: attempts, Interval: time.Second, Logger: logger})
 	t.Cleanup(checks.Close)
 	attempts.SetSweeper(checks)
-	recordings := recorder.New(recorder.Deps{Store: st, Runner: provider, Attempts: attempts, Interval: time.Second, DataDir: dataDir, Logger: logger})
+	recordings := recorder.New(recorder.Deps{Store: st, Runner: attempts.Runner(), Attempts: attempts, Interval: time.Second, DataDir: dataDir, Logger: logger})
 	t.Cleanup(recordings.Close)
 
 	checks.Start(t.Context())
@@ -93,15 +97,17 @@ func newK3sStack(t *testing.T) *k3sStack {
 		Attempts: attempts,
 		Content:  loaded,
 		Store:    st,
-		Runner:   provider,
+		Runner:   attempts.Runner(),
+		Hub:      backend.hub,
 		Recorder: recordings,
 		Auth:     auth.New(st),
 		Logger:   logger,
 	}))
 	t.Cleanup(server.Close)
+	backend.connect(t, server.URL)
 
 	_, httpClient := newLoggedInUser(t, server, st, "k3s")
-	return &k3sStack{server: server, attempts: attempts, provider: provider, store: st, client: httpClient}
+	return &k3sStack{backend: backend, server: server, attempts: attempts, provider: provider, store: st, client: httpClient}
 }
 
 func (s *k3sStack) request(t *testing.T, method, path, body string) map[string]any {
@@ -115,6 +121,7 @@ func (s *k3sStack) start(t *testing.T, labID string) string {
 	if created["_status"] != float64(http.StatusCreated) {
 		t.Fatalf("create attempt for %s: %v", labID, created)
 	}
+	s.backend.assertRunner(t, created)
 	id := created["id"].(string)
 	t.Cleanup(func() {
 		ctx := context.WithoutCancel(t.Context())

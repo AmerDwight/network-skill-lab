@@ -66,6 +66,7 @@ resolvectl flush-caches
 `
 
 type contentStack struct {
+	backend  *contentBackend
 	server   *httptest.Server
 	attempts *attempt.Service
 	provider *docker.Provider
@@ -102,20 +103,23 @@ func newContentStack(t *testing.T, cli client.APIClient) *contentStack {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	provider := docker.New(cli, docker.Options{Image: contentImage})
+	backend := newContentBackend(t, cli, st, contentImage, logger)
+	provider := backend.provider
 	attempts := attempt.New(attempt.Deps{
 		Store:   st,
-		Runner:  provider,
+		Runner:  backend.local,
+		Runners: backend.registry,
 		Content: loaded,
 		Image:   contentImage,
 		Logger:  logger,
 	})
 	t.Cleanup(attempts.Close)
+	backend.listen(attempts)
 
-	checks := checker.New(checker.Deps{Store: st, Runner: provider, Attempts: attempts, Interval: 2 * time.Second, Logger: logger})
+	checks := checker.New(checker.Deps{Store: st, Runner: attempts.Runner(), Attempts: attempts, Interval: 2 * time.Second, Logger: logger})
 	t.Cleanup(checks.Close)
 	attempts.SetSweeper(checks)
-	recordings := recorder.New(recorder.Deps{Store: st, Runner: provider, Attempts: attempts, Interval: 2 * time.Second, DataDir: dataDir, Logger: logger})
+	recordings := recorder.New(recorder.Deps{Store: st, Runner: attempts.Runner(), Attempts: attempts, Interval: 2 * time.Second, DataDir: dataDir, Logger: logger})
 	t.Cleanup(recordings.Close)
 
 	checks.Start(t.Context())
@@ -125,15 +129,17 @@ func newContentStack(t *testing.T, cli client.APIClient) *contentStack {
 		Attempts: attempts,
 		Content:  loaded,
 		Store:    st,
-		Runner:   provider,
+		Runner:   attempts.Runner(),
+		Hub:      backend.hub,
 		Recorder: recordings,
 		Auth:     auth.New(st),
 		Logger:   logger,
 	}))
 	t.Cleanup(server.Close)
+	backend.connect(t, server.URL)
 
 	_, client := newLoggedInUser(t, server, st, "content")
-	return &contentStack{server: server, attempts: attempts, provider: provider, store: st, client: client}
+	return &contentStack{backend: backend, server: server, attempts: attempts, provider: provider, store: st, client: client}
 }
 
 func (s *contentStack) request(t *testing.T, method, path, body string) map[string]any {
@@ -147,6 +153,7 @@ func (s *contentStack) start(t *testing.T, labID, mode string) string {
 	if created["_status"] != float64(http.StatusCreated) {
 		t.Fatalf("create %s attempt for %s: %v", mode, labID, created)
 	}
+	s.backend.assertRunner(t, created)
 	return created["id"].(string)
 }
 

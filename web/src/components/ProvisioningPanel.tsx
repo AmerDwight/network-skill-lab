@@ -1,17 +1,32 @@
 import { useTranslation } from "react-i18next";
 
-import type { LabNode, ProvisioningStep } from "../api/types";
+import type { LabEnvironment, LabNode, ProvisioningStep } from "../api/types";
 
 export function hasK3sRole(nodes: LabNode[]): boolean {
   return nodes.some((node) => node.role.startsWith("k3s-"));
 }
 
+function nodeStepFor(
+  step: ProvisioningStep | null,
+  environment: LabEnvironment | null,
+): ProvisioningStep {
+  if (step === "nodes" || step === "containers") {
+    return step;
+  }
+  return environment === "vm" ? "nodes" : "containers";
+}
+
 function stepsFor(
   step: ProvisioningStep | null,
+  environment: LabEnvironment | null,
   k3s: boolean,
   precheckAttempt: number | null,
 ): ProvisioningStep[] {
-  const steps: ProvisioningStep[] = ["networks", "containers", "bootstrap"];
+  const steps: ProvisioningStep[] = [
+    "networks",
+    nodeStepFor(step, environment),
+    "bootstrap",
+  ];
   if (k3s || step === "k3s") {
     steps.push("k3s");
   }
@@ -24,17 +39,19 @@ function stepsFor(
 
 export interface ProvisioningPanelProps {
   step: ProvisioningStep | null;
+  environment: LabEnvironment | null;
   nodes: LabNode[];
   precheckAttempt: number | null;
 }
 
 export function ProvisioningPanel({
   step,
+  environment,
   nodes,
   precheckAttempt,
 }: ProvisioningPanelProps) {
   const { t } = useTranslation();
-  const steps = stepsFor(step, hasK3sRole(nodes), precheckAttempt);
+  const steps = stepsFor(step, environment, hasK3sRole(nodes), precheckAttempt);
   const current = step ?? steps[0];
 
   return (

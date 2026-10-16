@@ -159,11 +159,18 @@ export interface Result {
 }
 
 export type ProvisioningStep =
-  "networks" | "containers" | "bootstrap" | "k3s" | "setup" | "precheck";
+  | "networks"
+  | "containers"
+  | "nodes"
+  | "bootstrap"
+  | "k3s"
+  | "setup"
+  | "precheck";
 
 export const provisioningSteps: readonly ProvisioningStep[] = [
   "networks",
   "containers",
+  "nodes",
   "bootstrap",
   "k3s",
   "setup",

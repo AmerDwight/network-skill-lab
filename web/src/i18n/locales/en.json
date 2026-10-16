@@ -63,6 +63,7 @@
   "provisioning.heading": "Preparing the sandbox",
   "provisioning.networks": "Creating networks",
   "provisioning.containers": "Starting nodes",
+  "provisioning.nodes": "Creating nodes",
   "provisioning.bootstrap": "Bootstrapping",
   "provisioning.setup": "Running setup",
   "terminal.addTab": "+ {{node}}",
