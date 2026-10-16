@@ -31,6 +31,7 @@ type Store struct {
 	CommandLog     *CommandLog
 	Recordings     *Recordings
 	Progress       *Progress
+	Runners        *Runners
 }
 
 func Open(dataDir string) (*Store, error) {
@@ -69,6 +70,7 @@ func Open(dataDir string) (*Store, error) {
 		CommandLog:     &CommandLog{db: db},
 		Recordings:     &Recordings{db: db},
 		Progress:       &Progress{db: db},
+		Runners:        &Runners{db: db},
 	}, nil
 }
 
