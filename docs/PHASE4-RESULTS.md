@@ -43,7 +43,7 @@
 
 | 項目 | 實測 |
 |---|---|
-| 建置時間 | provisioning 約 11 分鐘（apt 下載為主）+ 壓縮；輸出 659 MiB、虛擬 10 GiB |
+| 建置時間 | provisioning 139 s 到 660 s（三次建置，差異來自 apt 下載速度）+ 壓縮約 1 分鐘；輸出 659 MiB、虛擬 10 GiB |
 | 以輸出 image 的 overlay 開機 | guest-agent 20.8 s、SSH 24.5 s |
 | 契約檢查 | 介面 `eth0`；`nft`/`iptables`/`tcpdump`/`netplan`/`nmcli`/`snmpwalk` 都在；`/usr/local/sbin/nsl-bootstrap`、`/etc/nsl` 存在；`nsl` 使用者 NOPASSWD sudo 可用；machine-id 每台不同；`qemu-guest-agent`、`ssh`、`systemd-networkd` active，`NetworkManager`、`nginx` 停用 |
 | 選項 | `WITH_K3S=1` 另裝 k3s binary（Phase 4 不驗證）；`NSL_VM_IMAGE_DIR`、`CLOUD_IMAGE_URL`、`DISK_SIZE`、`BUILD_MEM_MIB`、`NETWORK` 可覆寫 |
