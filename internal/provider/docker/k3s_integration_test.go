@@ -167,11 +167,11 @@ func TestK3sSandbox(t *testing.T) {
 		t.Errorf("traefik is deployed although the default disable list should have dropped it: %s", traefik.Stdout)
 	}
 
-	pods := waitForCrashLoop(t, p, sb)
-	t.Logf("broken pod is failing: %s", strings.TrimSpace(pods))
+	pods := waitForBackOff(t, p, sb)
+	t.Logf("broken pod is in back-off: %s", strings.TrimSpace(pods))
 
 	if code := runCheck(t, p, sb, spec, check); code == 0 {
-		t.Error("check passed although the pod of broken is crashlooping")
+		t.Error("check passed although the pod of broken is in back-off")
 	}
 
 	mustExec(t, p, sb, "k3s01", "kubectl", "-n", "nsl", "patch", "deploy", "broken", "--type=json",
@@ -211,38 +211,51 @@ func runCheck(t *testing.T, p *Provider, sb runner.SandboxID, spec runner.Sandbo
 }
 
 const podStatusTemplate = `{range .items[*]}{.metadata.name} ` +
-	`{.status.containerStatuses[*].state.waiting.reason} ` +
-	`{.status.containerStatuses[*].restartCount}{"\n"}{end}`
+	`{.status.containerStatuses[0].restartCount} ` +
+	`waiting={.status.containerStatuses[0].state.waiting.reason} ` +
+	`terminated={.status.containerStatuses[0].state.terminated.reason} ` +
+	`running={.status.containerStatuses[0].state.running.startedAt}{"\n"}{end}`
 
-// waitForCrashLoop waits for evidence that the deployment is really broken, so that a
+// waitForBackOff waits for evidence that the deployment is really broken, so that a
 // check failing at an arbitrary moment of the initial rollout cannot pass for it (#48).
-func waitForCrashLoop(t *testing.T, p *Provider, sb runner.SandboxID) string {
+func waitForBackOff(t *testing.T, p *Provider, sb runner.SandboxID) string {
 	t.Helper()
 	var out string
-	deadline := time.Now().Add(60 * time.Second)
+	start := time.Now()
+	deadline := start.Add(60 * time.Second)
 	for {
 		out = string(mustExec(t, p, sb, "k3s01", "kubectl", "-n", "nsl", "get", "pods",
 			"-o", "jsonpath="+podStatusTemplate).Stdout)
-		if crashLooping(out) {
+		if inBackOff(out) {
+			t.Logf("broken reached back-off after %s", time.Since(start).Round(time.Millisecond))
 			return out
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no pod of broken reached CrashLoopBackOff or restarted within 60s:\n%s", out)
+			t.Fatalf("no pod of broken reached back-off within 60s:\n%s", out)
 		}
 		time.Sleep(time.Second)
 	}
 }
 
-func crashLooping(status string) bool {
+// inBackOff requires the container to be stopped as well as restarted: right after each
+// restart the pod shows running for a moment and the deployment reports an available replica.
+func inBackOff(status string) bool {
 	for line := range strings.Lines(status) {
 		fields := strings.Fields(line)
 		if len(fields) < 2 || !strings.HasPrefix(fields[0], "broken-") {
 			continue
 		}
-		if slices.Contains(fields[1:], "CrashLoopBackOff") {
-			return true
+		restarts, err := strconv.Atoi(fields[1])
+		if err != nil || restarts < 1 {
+			continue
 		}
-		if restarts, err := strconv.Atoi(fields[len(fields)-1]); err == nil && restarts >= 1 {
+		state := map[string]string{}
+		for _, f := range fields[2:] {
+			if k, v, ok := strings.Cut(f, "="); ok {
+				state[k] = v
+			}
+		}
+		if state["running"] == "" && (state["waiting"] != "" || state["terminated"] != "") {
 			return true
 		}
 	}
