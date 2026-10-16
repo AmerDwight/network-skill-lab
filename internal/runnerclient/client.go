@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AmerDwight/network-skill-lab/internal/provider/docker"
 	"github.com/AmerDwight/network-skill-lab/internal/runner"
 	"github.com/AmerDwight/network-skill-lab/internal/runnerproto"
 	"github.com/coder/websocket"
@@ -80,8 +81,13 @@ func newClient(opts Options) *client {
 	}
 }
 
+type leftoverCollector interface {
+	Collect(ctx context.Context) (docker.Removed, error)
+}
+
 func (c *client) run(ctx context.Context) error {
 	defer c.destroyAll("runner stopped")
+	c.collectLeftovers(ctx)
 
 	backoff := c.minBackoff
 	for {
@@ -111,6 +117,27 @@ func (c *client) run(ctx context.Context) error {
 		}
 		backoff = min(backoff*2, c.maxBackoff)
 	}
+}
+
+// collectLeftovers removes what a previous process of this runner left on the provider.
+// The process owns its instance exclusively and the control plane has already errored
+// any attempt bound to the dead process, so nothing collected here is still in use.
+func (c *client) collectLeftovers(ctx context.Context) {
+	if collector, ok := c.opts.Provider.(leftoverCollector); ok {
+		removed, err := collector.Collect(ctx)
+		if err != nil {
+			c.log.Warn("could not remove leftovers of a previous run", "error", err)
+			return
+		}
+		c.log.Info(fmt.Sprintf("removed leftovers of a previous run: %d containers, %d networks", removed.Containers, removed.Networks),
+			"containers", removed.Containers, "networks", removed.Networks)
+		return
+	}
+	if err := c.opts.Provider.GC(ctx); err != nil {
+		c.log.Warn("could not remove leftovers of a previous run", "error", err)
+		return
+	}
+	c.log.Info("removed leftovers of a previous run")
 }
 
 func (c *client) session(ctx context.Context) (bool, error) {
