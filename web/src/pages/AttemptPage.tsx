@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { getLab } from "../api/client";
+import type { LabEnvironment } from "../api/types";
 import { AttemptFailure } from "../components/AttemptFailure";
 import { AttemptPanel } from "../components/AttemptPanel";
 import { ProvisioningPanel } from "../components/ProvisioningPanel";
@@ -41,6 +43,30 @@ export function AttemptPage() {
   }, [attemptId, load, reset]);
 
   useAttemptEvents(attemptId);
+
+  const labId = attempt?.lab_id ?? "";
+  const provisioning = status === "provisioning";
+  const [environment, setEnvironment] = useState<{
+    labId: string;
+    value: LabEnvironment;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!provisioning || labId === "") {
+      return;
+    }
+    let cancelled = false;
+    getLab(labId)
+      .then((lab) => {
+        if (!cancelled) {
+          setEnvironment({ labId, value: lab.environment });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [labId, provisioning]);
 
   useEffect(() => {
     const timer = setInterval(() => tick(), timerIntervalMs);
@@ -87,6 +113,9 @@ export function AttemptPage() {
         {status === "provisioning" ? (
           <ProvisioningPanel
             step={provisioningStep}
+            environment={
+              environment?.labId === labId ? environment.value : null
+            }
             nodes={attempt?.nodes ?? []}
             precheckAttempt={precheckAttempt}
           />
