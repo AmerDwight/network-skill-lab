@@ -1,0 +1,15 @@
+nsl-a mgmt 192.168.122.40  nsl-b mgmt 192.168.122.215
+both guest-agents ready: 45.9s
+both ssh ready:          60.0s (target <90s cold start)
+link a->b: 3 packets transmitted, 3 received, 0% packet loss, time 2006ms
+link b->a: 3 packets transmitted, 3 received, 0% packet loss, time 2673ms
+nsl-a enp2s0: enp2s0           UP             10.10.0.1/24 fe80::5054:ff:fef4:1965/64 
+host bridge nslbr-a addrs: [] (expect none)
+a -> host via link (10.10.0.254): unreachable-as-expected
+a -> internet via mgmt: ok
+host used memory: before 2101MiB after 3022MiB (+921)
+qemu rss:
+  622 MiB guest=nsl-a,debug-threads=on
+  612 MiB guest=nsl-b,debug-threads=on
+overlay disk usage: 34M for two overlays
+host load: 12.82 12.20 6.63

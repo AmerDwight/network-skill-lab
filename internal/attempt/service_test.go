@@ -24,8 +24,8 @@ var provisioningSteps = []string{"networks", "containers", "bootstrap", "setup"}
 
 type harness struct {
 	*Service
-	clock  *fakeClock
-	runner *fakeRunner
+	clock   *fakeClock
+	runner  *fakeRunner
 	store   *store.Store
 	dataDir string
 	lab     content.Lab

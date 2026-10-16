@@ -1,0 +1,23 @@
+kernel 6.18.33.2-microsoft-standard-WSL2
+/dev/kvm: crw-rw---- 1 root kvm 10, 232 Oct 16 14:27 /dev/kvm
+kvm rw: yes
+libvirtd: inactive
+virsh version: Running hypervisor: QEMU 8.2.2
+kvm domain type: 2
+host cpu: <model>Broadwell-noTSX-IBRS</model>
+networks: default:active : 
+virt-host-validate:
+    QEMU: Checking for hardware virtualization                                 : PASS
+    QEMU: Checking if device /dev/kvm exists                                   : PASS
+    QEMU: Checking if device /dev/kvm is accessible                            : FAIL (Check /dev/kvm is world writable or you are in a group that is allowed to access it)
+    QEMU: Checking if device /dev/cpu/0/msr exists                             : PASS
+    QEMU: Checking if device /dev/vhost-net exists                             : PASS
+    QEMU: Checking if device /dev/net/tun exists                               : PASS
+    QEMU: Checking for cgroup 'cpu' controller support                         : PASS
+    QEMU: Checking for cgroup 'cpuacct' controller support                     : PASS
+    QEMU: Checking for cgroup 'cpuset' controller support                      : PASS
+    QEMU: Checking for cgroup 'memory' controller support                      : PASS
+    QEMU: Checking for cgroup 'devices' controller support                     : WARN (Enable 'devices' in kernel Kconfig file or mount/enable cgroup controller in your system)
+    QEMU: Checking for cgroup 'blkio' controller support                       : PASS
+    QEMU: Checking for device assignment IOMMU support                         : WARN (No ACPI DMAR table found, IOMMU either disabled in BIOS or not supported by this hardware platform)
+    QEMU: Checking for secure guest support                                    : WARN (Unknown if this platform has Secure Guest support)

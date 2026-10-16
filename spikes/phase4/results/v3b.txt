@@ -1,0 +1,9 @@
+nft policy drop installed: 2 chains
+ssh with everything down: ssh: connect to host 192.168.122.40 port 22: Connection timed out
+FAILED-as-expected
+guest-exec with all links down + nft drop: ok in 3.18s
+  enp1s0           DOWN           52:54:00:17:c0:80 <BROADCAST,MULTICAST> 
+  enp2s0           DOWN           52:54:00:f4:19:65 <BROADCAST,MULTICAST> 
+  exit-probe
+  exit=3
+restored: ssh ok

@@ -1,0 +1,9 @@
+image /var/tmp/nsl-spike/build/nsl-node.qcow2 (659 MiB
+659 MiB)
+guest-agent ready: 20.8s   ssh ready: 24.5s
+links: lo eth0 
+tools: nft=yes iptables=yes tcpdump=yes netplan=yes nmcli=yes snmpwalk=yes k3s=no 
+bootstrap: ls: cannot access '/etc/sudoers.d/nsl': Permission denied /usr/local/sbin/nsl-bootstrap  /etc/nsl: 
+sudo: root
+machine-id: 43c5ffaa381843d1ab229cf848bd1fd2
+services: active active active inactive inactive 
