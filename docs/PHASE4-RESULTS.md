@@ -1,7 +1,46 @@
 # Phase 4 遠端 runner 與 VM：驗收結果
 
 > 日期：2026-10-16 起。Spec：`docs/specs/phase4.html`。Task：issue #74 到 #79（T0 到 T5）。
-> 本檔先記 T0 VM spike 的結果；§01 七條驗收由 T5 補齊。
+> 驗收環境：同一台 WSL2 主機；控制面（`NSL_INSTANCE=accept-cp`、`NSL_MAX_SANDBOXES=1`、port 18080）、一個 Docker 遠端 runner（`remote-a`，容量 2，instance 標籤 = runner 名稱）與一個 VM runner（`vm-01`，容量 2，`--provider vm`）都是獨立的 `nsl` 程序，透過 `ws://127.0.0.1:18080/ws/runner` 連線。驅動腳本以 cookie jar 走 API 與 terminal WebSocket，與 Phase 3 相同。
+
+## 1. §01 完成定義逐條
+
+| # | 條目 | 結果 | 實測 |
+|---|---|---|---|
+| 1 | 遠端執行 | 通過 | bob 的 attempt 被排到 `remote-a`（`runner: "remote-a"`），沙箱容器帶 `nsl.instance=remote-a` 標籤、由 runner 程序建立；terminal 經控制面轉發修好 `eth1` 後 15.1 s 進 passed；控制面 instance（`accept-cp`）名下只有 alice 那題的容器。錄影、指令歷史、checkpoint 皆照常 |
+| 2 | 斷線有交代 | 通過（有一項修正） | `kill -9` remote-a 程序後 carol 的 attempt **0.5 s** 進 `error`，`error_message` 為 `runner disconnected`；同時在 `local` 上的 bob 不受影響。runner 程序存活的斷線（T2/T3 測試以 TCP proxy 切線）重連後殘留沙箱被控制面銷毀；但**程序整個重啟**時新程序的 hello 回報 `sandboxes: 0`，4 個容器與 4 個網路留在主機上直到手動 `NSL_INSTANCE=remote-a nsl gc` → 修正為 runner 啟動時先 GC 自己的 instance（T5b） |
+| 3 | 多 runner 並存 | 通過 | alice → `local`、bob → `remote-a` 同時 running、各自 passed；admin runners 列出 `local 0/1`、`remote-a 0/2`、`vm-01 0/2` 含能力、連線狀態、版本；三題佔滿後第四題 429 `runner_busy`，body 帶 `runners: [{local 1/1}, {remote-a 2/2}]`，`sandboxes_max` 為兩者容量和 3；同一時間 `environment: vm` 的題仍能排到 `vm-01`（容量分開計） |
+| 4 | VM spike 有結論 | 通過 | 見上節，V1 到 V5 全過，T4 已做 |
+| 5 | VM lab 可跑 | 通過 | `net-ip-01-vm` 由 alice 從 API 開題 → `vm-01`，**40.8 s** 進 running（兩台 VM 冷啟動含 cloud-init、bootstrap、setup），SSH pty 下 `ip link set eth1 up` 後 5.2 s 三個 checkpoint 全過進 passed；結束後 libvirt 無殘留 domain / network |
+| 6 | 保留策略 | 通過 | `nsl prune --older-than 1s --dry-run` 列出 12 筆、4218 bytes；admin stats 有 `oldest_attempt_at`；#71 由 #80 修好（Destroy 等容器消失再刪網路，`nsl gc` 回報數量） |
+| 7 | 回歸 | 通過 | §2：lint、unit、content、content-remote、vm 全綠；integration 只剩一個 Phase 2 起的時序 flake，另開 PR 修 |
+
+其他驗過的點：撤銷 `remote-a` 的 token 後 **3.3 s** 內該 runner 程序收到 `runner token revoked` 並結束，admin 列表 `connected: false` 且有 `revoked_at`；重複名稱 409、不合法名稱 400、非 admin 讀 runners 端點 403、匿名 401；`/api/runners/summary` 給一般使用者看 runner 能力與連線狀態（前端據此在沒有 vm runner 時停用 Start）。
+
+## 2. 套件
+
+在最終 main（含 #80 到 #86）依序跑：
+
+| 套件 | 結果 |
+|---|---|
+| `make lint` | 0 issues（golangci-lint、eslint、prettier、tsc） |
+| `make test` | Go 17 個 package、前端 33 個檔案 290 個測試全過，52 s |
+| `make test-integration` | 除 `TestK3sSandbox` 外全過（154 s）；該測試是 Phase 2 起就有的時序競態（見 §3），修正另開 PR |
+| `make test-content` | 五個 lab 全過，171 s |
+| `make test-content-remote` | 同一套 content 測試改走 runner 協定（in-process hub + runnerclient + Docker provider），五個 lab 全過，164 s；每個 attempt 的 `runner` 都是遠端名稱 |
+| `make test-vm` | VM provider 單元 + 整合（兩台 VM 冷啟動 37.3 s）與 runnerclient 經協定跑 VM provider 全過，88 s |
+
+## 3. 驗收與開發過程抓到的問題
+
+| 問題 | 處理 |
+|---|---|
+| runner 程序被 kill 後重啟，前一個程序留下的沙箱沒人清 | T5b：`nsl runner` 啟動時先對自己的 instance 跑 GC |
+| 前端 provisioning 面板不認得 VM provider 的 `nodes` 步驟 | T5a |
+| content 套件只能跑 in-process runner，§01 第 7 條要求也能指向遠端 runner | T5a：`make test-content-remote` |
+| `TestK3sSandbox` 一天內失敗四次：`check passed although the pod of broken is crashlooping` | 不是 Phase 4 回歸。`waitForCrashLoop` 把「restartCount ≥ 1」也當成 crash loop，但第一次重啟後容器會短暫 Running、deployment 的 `availableReplicas` 瞬間為 1，check 在那個視窗內合法地通過。修正：只在 pod 進入 `CrashLoopBackOff` 後才斷言（測試層修正，另開 PR） |
+| T1 的 k3s 整合測試在 VM image 建置期間（load 12 到 18）逾時 | 負載問題：主機空檔重跑 49.5 s 通過 |
+| #81 與 #80 在 `cmd/nsl/main.go` 的子指令 case 衝突 | planner 做機械性 rebase（兩邊都保留）後重跑 CI 合併 |
+| Haiku 把 chi 巢狀 Group 的 admin 路由判成沒掛 session 驗證 | 誤報：巢狀 Group 繼承外層中介層，httptest 亦驗證 401；駁回 |
 
 ## VM spike（T0，spec §08）
 
