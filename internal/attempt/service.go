@@ -402,17 +402,24 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if !isTerminal(att.Status) {
 		return fmt.Errorf("%w: %s is %s", ErrNotTerminal, id, att.Status)
 	}
+	return s.remove(ctx, id)
+}
+
+func (s *Service) remove(ctx context.Context, id string) error {
 	if err := s.store.Attempts.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.dataDir == "" {
 		return nil
 	}
-	dir := filepath.Join(s.dataDir, recordingsDir, id)
-	if err := os.RemoveAll(dir); err != nil {
+	if err := os.RemoveAll(s.recordingsOf(id)); err != nil {
 		return fmt.Errorf("remove recordings of attempt %s: %w", id, err)
 	}
 	return nil
+}
+
+func (s *Service) recordingsOf(id string) string {
+	return filepath.Join(s.dataDir, recordingsDir, id)
 }
 
 func (s *Service) Finish(ctx context.Context, id, status string) error {

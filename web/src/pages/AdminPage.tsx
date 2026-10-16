@@ -31,6 +31,14 @@ function StatsStrip({ stats }: { stats: AdminStats }) {
         <dt>{t("admin.stats.attempts")}</dt>
         <dd>{stats.attempts}</dd>
       </div>
+      <div className="admin-stats__item">
+        <dt>{t("admin.stats.oldest")}</dt>
+        <dd>
+          {stats.oldest_attempt_at === null
+            ? t("admin.stats.oldest.none")
+            : formatDate(stats.oldest_attempt_at)}
+        </dd>
+      </div>
     </dl>
   );
 }

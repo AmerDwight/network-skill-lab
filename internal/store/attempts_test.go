@@ -99,3 +99,66 @@ func TestAttemptsCountActive(t *testing.T) {
 		t.Errorf("CountActive() = %d, want 2", count)
 	}
 }
+
+func TestAttemptsListTerminalEndedBefore(t *testing.T) {
+	st := openStore(t)
+	ctx := t.Context()
+	local := localUser(t, st)
+
+	now := time.Now()
+	ended := func(status string, endedAt time.Time) Attempt {
+		t.Helper()
+		att := createAttempt(t, st, local.ID, status, endedAt.Add(-time.Hour))
+		if err := st.Attempts.SetStatus(ctx, att.ID, status, &endedAt, ""); err != nil {
+			t.Fatalf("SetStatus() error = %v", err)
+		}
+		return att
+	}
+	oldest := ended(StatusPassed, now.Add(-72*time.Hour))
+	older := ended(StatusError, now.Add(-48*time.Hour))
+	ended(StatusAbandoned, now.Add(-time.Hour))
+	createAttempt(t, st, local.ID, StatusRunning, now.Add(-96*time.Hour))
+	createAttempt(t, st, local.ID, StatusProvisioning, now.Add(-96*time.Hour))
+
+	got, err := st.Attempts.ListTerminalEndedBefore(ctx, now.Add(-24*time.Hour), 10)
+	if err != nil {
+		t.Fatalf("ListTerminalEndedBefore() error = %v", err)
+	}
+	if len(got) != 2 || got[0].ID != oldest.ID || got[1].ID != older.ID {
+		t.Fatalf("got %+v, want the two attempts that ended over a day ago, oldest first", got)
+	}
+
+	limited, err := st.Attempts.ListTerminalEndedBefore(ctx, now.Add(-24*time.Hour), 1)
+	if err != nil {
+		t.Fatalf("ListTerminalEndedBefore() error = %v", err)
+	}
+	if len(limited) != 1 || limited[0].ID != oldest.ID {
+		t.Fatalf("limited = %+v, want only the oldest", limited)
+	}
+}
+
+func TestAttemptsOldestCreatedAt(t *testing.T) {
+	st := openStore(t)
+	ctx := t.Context()
+
+	none, err := st.Attempts.OldestCreatedAt(ctx)
+	if err != nil {
+		t.Fatalf("OldestCreatedAt() error = %v", err)
+	}
+	if none != nil {
+		t.Fatalf("OldestCreatedAt() = %v on an empty store, want nil", none)
+	}
+
+	local := localUser(t, st)
+	base := time.Date(2026, 3, 1, 8, 30, 0, 0, time.UTC)
+	createAttempt(t, st, local.ID, StatusRunning, base.Add(time.Hour))
+	createAttempt(t, st, local.ID, StatusPassed, base)
+
+	got, err := st.Attempts.OldestCreatedAt(ctx)
+	if err != nil {
+		t.Fatalf("OldestCreatedAt() error = %v", err)
+	}
+	if got == nil || !got.Equal(base) {
+		t.Errorf("OldestCreatedAt() = %v, want %v", got, base)
+	}
+}

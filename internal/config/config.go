@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type Config struct {
 	CheckInterval  time.Duration
 	SystemdTimeout time.Duration
 	MaxSandboxes   int
+	PruneAfter     time.Duration
 	LogLevel       slog.Level
 }
 
@@ -44,6 +46,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.MaxSandboxes, err = lookupInt("NSL_MAX_SANDBOXES", 3); err != nil {
+		return Config{}, err
+	}
+	if cfg.PruneAfter, err = lookupDuration("NSL_PRUNE_AFTER", 0); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogLevel, err = lookupLevel("NSL_LOG_LEVEL", slog.LevelInfo); err != nil {
@@ -75,7 +80,7 @@ func lookupDuration(key string, fallback time.Duration) (time.Duration, error) {
 	if !ok || v == "" {
 		return fallback, nil
 	}
-	d, err := time.ParseDuration(v)
+	d, err := ParseDuration(v)
 	if err != nil {
 		return 0, fmt.Errorf("parse %s: %w", key, err)
 	}
@@ -83,6 +88,28 @@ func lookupDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("parse %s: must be positive, got %q", key, v)
 	}
 	return d, nil
+}
+
+// ParseDuration extends time.ParseDuration with a leading whole-day component,
+// as in "30d" or "1d12h", since retention periods are naturally given in days.
+func ParseDuration(s string) (time.Duration, error) {
+	days, rest, ok := strings.Cut(s, "d")
+	if !ok {
+		return time.ParseDuration(s)
+	}
+	n, err := strconv.ParseUint(days, 10, 16)
+	if err != nil {
+		return 0, fmt.Errorf("time: invalid duration %q", s)
+	}
+	d := time.Duration(n) * 24 * time.Hour
+	if rest == "" {
+		return d, nil
+	}
+	extra, err := time.ParseDuration(rest)
+	if err != nil || extra < 0 {
+		return 0, fmt.Errorf("time: invalid duration %q", s)
+	}
+	return d + extra, nil
 }
 
 func lookupInt(key string, fallback int) (int, error) {

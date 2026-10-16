@@ -188,6 +188,8 @@
   "admin.stats.sandboxes.value": "{{active}} / {{max}}",
   "admin.stats.recordings": "Recordings on disk",
   "admin.stats.attempts": "Attempts",
+  "admin.stats.oldest": "Oldest record",
+  "admin.stats.oldest.none": "None yet",
   "admin.attempts.heading": "Attempts in progress",
   "admin.attempts.loading": "Loading the attempts",
   "admin.attempts.error": "Could not load the attempts",

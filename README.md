@@ -121,3 +121,5 @@ location / {
 ```
 
 First run: create an admin with `nsl user add <name> --role admin`, then sign in. Set `NSL_MAX_SANDBOXES` to what the host can hold (about 30 MB per Ubuntu node, 200 MB per k3s agent, 600 MB per k3s server). One `nsl serve` per data directory; the sandbox host must stay on a trusted network until the remote runner exists (DESIGN.md R6).
+
+Retention: `nsl prune --older-than 30d [--dry-run]` deletes finished attempts that ended before the cutoff, with their recordings and command history. Set `NSL_PRUNE_AFTER` (for example `720h` or `30d`) to have `nsl serve` do the same at startup and every 24 hours.
