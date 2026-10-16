@@ -111,3 +111,17 @@ type Recording struct {
 	EndedAt   *time.Time
 	Bytes     *int64
 }
+
+type Runner struct {
+	ID           string
+	Name         string
+	TokenHash    string
+	Capabilities []string
+	Capacity     int
+	CreatedAt    time.Time
+	LastSeenAt   *time.Time
+	RevokedAt    *time.Time
+	Version      string
+}
+
+func (r Runner) Revoked() bool { return r.RevokedAt != nil }

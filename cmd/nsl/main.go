@@ -65,6 +65,8 @@ func run(args []string) error {
 		return gcCmd(args[1:])
 	case "prune":
 		return pruneCmd(args[1:], os.Stdout)
+	case "runner":
+		return runnerCmd(args[1:], os.Stdout, os.Stderr)
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -86,6 +88,7 @@ commands:
   prune          delete finished attempts older than --older-than, with their recordings
   content lint   validate a content directory
   user           manage local accounts: add, passwd, disable, enable, list
+  runner         run sandboxes for a remote control plane; token, revoke, list
   version        print the build version
 `)
 }
